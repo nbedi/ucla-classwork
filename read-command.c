@@ -87,21 +87,21 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
   {
     case IF:
       com.type = IF_COMMAND;
-      com->u.command[0] = newCom;
+      com->u.command[0] = *(newCom);
       if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
       {
           next_word = get_next_word(buffer, &it, bufSize);
           if (next_word.type == THEN)
           {
               command_t thenCom;
-              com->u.command[1] = thenCom;
+              com->u.command[1] = *(thenCom);
               if (get_command(buffer, &it, bufSize, &thenCom, &lineNum))
               {
                   next_word = get_next_word(buffer, &it, bufSize);
                   if (next_word.type == ELSE)
                   {
                     command_t elseCom;
-                    com->u.command[2] = elseCom;
+                    com->u.command[2] = *(elseCom);
                     if (get_command(buffer, &it, bufSize, &elseCom, &lineNum))
                     {
                         next_word = get_next_word(buffer, &it, bufSize);
@@ -135,12 +135,14 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
 
     case LPARENS:
       com.type = SUBSHELL_COMMAND;
-      com->u.command[0] = newCom;
       if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
       {
         next_word = get_next_word(buffer, &it, bufSize);
         if (next_word.type == RPARENS)
+        {
+          com->u.command[0] = *(newCom);
           return true;
+        }
         else bad_error(lineNum);
       }
       else bad_error(lineNume);
@@ -166,9 +168,79 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
     case DO:
     case DONE:
     case SIMPLE: 
-      com.type = SIMPLE_COMMAND;
+      // make temporary command
+      command tempCom;
+      tempCom.type = SIMPLE_COMMAND;
+      //TODO FIX ALLOCATION MAYBE
+      tempCom->u.word = checked_malloc(sizeof(char*)*10);
+      tempCom->u.word[word_count] = checked_malloc(sizeof(char)*10);
+      tempCom->u.word[word_count] = next_word.string;
+      int word_count = 1;
 
-    default:  fprintf(stderr, "%d: syntax error\n", lineNum); exit(-1);
+
+      next_word = get_next_word(buffer, &it, bufSize);
+      switch(next_word.type)
+      {
+          case PIPE:
+            com.type = PIPE_COMMAND;
+            com->u.command[0] = tempCom;
+            command_t secondCom;
+            if (get_command (buffer, &it, bufSize, &secondCom, &lineNum))
+            {
+              com->u.command[1] = *(secondCom);
+              return true;
+            }
+            else return bad_error(lineNum);   
+
+          // case SEMICOLON:
+          //   com.type = SEQUENCE_COMMAND;
+          //   com->u.command[0] = tempCom;
+          //   command_t secondCom;
+          //   next_word = get_next_word(buffer, &it, bufSize);
+
+          //   if (get_command (buffer, int &it, int bufSize, command_t &secondCom, int &lineNum))
+          //   {
+          //     com->u.command[1] = *(secondCom);
+          //     return true;
+          //   }
+          //   else return bad_error(lineNum);
+
+          case LPARENS:
+
+          case INPUT:
+
+          case OUTPUT:
+
+          case COMMENT:
+            next_word = get_next_word(buffer, &it, bufSize);
+            while (next_word.type != NEWLINE && next_word.type != EOF) 
+            {
+              next_word = get_next_word(buffer, &it, bufSize)
+            }
+            return true;
+
+          // TODO: SEQUENCE STATEMENTS
+          case SEMICOLON:
+          case NEWLINE:
+          case EOF:
+            com = tempCom;
+            return true;
+
+          case IF:
+          case THEN:
+          case ELSE:
+          case FI:
+          case WHILE:
+          case DO:
+          case DONE:
+          case UNTIL:
+          case SIMPLE:
+
+
+          default: bad_error(lineNum);
+      }
+
+    default:  bad_error(lineNum);
   }
 
 }
