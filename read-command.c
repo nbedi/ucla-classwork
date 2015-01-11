@@ -28,7 +28,7 @@
 
 
 //***********************************************************************
-//                  STRUCT DEFINITIONS & AUXILARY FUNCTIONS
+//              STRUCT DEFINITIONS & AUXILARY FUNCTIONS
 //***********************************************************************
 
 struct command_node
@@ -82,7 +82,7 @@ void bad_error(int lineNum)
 //                            GET NEXT WORD
 //***********************************************************************
 
-word get_next_word(char *buffer, int &it, int bufSize)
+word get_next_word(char *buffer, int &it, int bufSize, int &lineNum)
 {
   word newWord;
   if (it == bufSize) 
@@ -99,19 +99,21 @@ word get_next_word(char *buffer, int &it, int bufSize)
 
 bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNum)
 {
-  word next_word = get_next_word(buffer, &it, bufSize);
+  word next_word = get_next_word(buffer, &it, bufSize, &lineNum);
   com.status = -1;
   command_t newCom;
 
   switch (next_word.type) 
   {
+      
+      
     case IF:
       com.type = IF_COMMAND;
       // IF
       com->u.command[0] = *(newCom);
       if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
       {
-          next_word = get_next_word(buffer, &it, bufSize);
+          next_word = get_next_word(buffer, &it, bufSize, &lineNum);
           // THEN
           if (next_word.type == THEN)
           {
@@ -119,7 +121,7 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
               com->u.command[1] = *(thenCom);
               if (get_command(buffer, &it, bufSize, &thenCom, &lineNum))
               {
-                  next_word = get_next_word(buffer, &it, bufSize);
+                  next_word = get_next_word(buffer, &it, bufSize, &lineNum);
                   // ELSE
                   if (next_word.type == ELSE)
                   {
@@ -127,7 +129,7 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
                     com->u.command[2] = *(elseCom);
                     if (get_command(buffer, &it, bufSize, &elseCom, &lineNum))
                     {
-                        next_word = get_next_word(buffer, &it, bufSize);
+                        next_word = gget_next_word(buffer, &it, bufSize, &lineNum);
                         // FI AFTER ELSE
                         if (next_word.type == FI)
                           return true;
@@ -152,19 +154,78 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
       else
         bad_error(lineNum);
 
+      
+      
     case WHILE:
       com.type = WHILE_COMMAND;
+      // WHILE
+      com->u.command[0] = *(newCom);
+      if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
+      {
+        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+        // DO
+        if (next_word.type == DO)
+        {
+          command_t doCom;
+          com->u.command[1] = *(doCom);
+          if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
+          {
+            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+            // DONE
+            if (next_word.type == DONE)
+              return true;
+            else
+              bad_error(lineNum);
+          }
+          else
+            bad_error(lineNum);
+        }
+        else
+          bad_error(lineNum);
+      }
+      else
+        bad_error(lineNum);
 
+      
+      
     case UNTIL:
       com.type = UNTIL_COMMAND;
+      // UNTIL
+      com->u.command[0] = *(newCom);
+      if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
+      {
+        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+        // DO
+        if (next_word.type == DO)
+        {
+          command_t doCom;
+          com->u.command[1] = *(doCom);
+          if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
+          {
+            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+            // DONE
+            if (next_word.type == DONE)
+              return true;
+            else
+              bad_error(lineNum);
+          }
+          else
+            bad_error(lineNum);
+        }
+        else
+          bad_error(lineNum);
+      }
+      else
+        bad_error(lineNum);
     
       
 
+      
     case LPARENS:
       com.type = SUBSHELL_COMMAND;
       if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
       {
-        next_word = get_next_word(buffer, &it, bufSize);
+        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
         if (next_word.type == RPARENS)
         {
           com->u.command[0] = *(newCom);
@@ -175,8 +236,9 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
       else bad_error(lineNume);
 
 
+      
     case COMMENT:
-      while (get_next_word(buffer, &it, bufSize).type != NEWLINE)
+      while (get_next_word(buffer, &it, bufSize, &lineNum).type != NEWLINE)
         continue;
       return get_command(buffer, &it, bufSize, &com, &lineNum);
 
@@ -239,10 +301,10 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
           case OUTPUT:
 
           case COMMENT:
-            next_word = get_next_word(buffer, &it, bufSize);
+            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
             while (next_word.type != NEWLINE && next_word.type != EOF) 
             {
-              next_word = get_next_word(buffer, &it, bufSize)
+              next_word = get_next_word(buffer, &it, bufSize, &lineNum);
             }
             return true;
 
