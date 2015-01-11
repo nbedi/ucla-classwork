@@ -88,21 +88,21 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
     case IF:
       com.type = IF_COMMAND;
       com->u.command[0] = newCom;
-      if (get_command(buffer, &it, bufSize, newCom, &lineNum))
+      if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
       {
           next_word = get_next_word(buffer, &it, bufSize);
           if (next_word.type == THEN)
           {
               command_t thenCom;
               com->u.command[1] = thenCom;
-              if (get_command(buffer, &it, bufSize, thenCom, &lineNum))
+              if (get_command(buffer, &it, bufSize, &thenCom, &lineNum))
               {
                   next_word = get_next_word(buffer, &it, bufSize);
                   if (next_word.type == ELSE)
                   {
                     command_t elseCom;
                     com->u.command[2] = elseCom;
-                    if (get_command(buffer, &it, bufSize, elseCom, &lineNum))
+                    if (get_command(buffer, &it, bufSize, &elseCom, &lineNum))
                     {
                         next_word = get_next_word(buffer, &it, bufSize);
                         if (next_word.type == FI)
@@ -131,13 +131,32 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
     case UNTIL:
       com.type = UNTIL_COMMAND;
     
-    case SEMICOLON:
-      com.type = SIMPLE_COMMAND;
-    
+      
+
     case LPARENS:
       com.type = SUBSHELL_COMMAND;
+      com->u.command[0] = newCom;
+      if (get_command(buffer, &it, bufSize, &newCom, &lineNum))
+      {
+        next_word = get_next_word(buffer, &it, bufSize);
+        if (next_word.type == RPARENS)
+          return true;
+        else bad_error(lineNum);
+      }
+      else bad_error(lineNume);
+
 
     case COMMENT:
+      while (get_next_word(buffer, &it, bufSize).type != NEWLINE) {
+        continue;
+      }
+      return get_command(buffer, &it, bufSize, &com, &lineNum);
+
+
+    case NEWLINE:
+    case SEMICOLON:
+      return get_command(buffer, &it, bufSize, &com, &lineNum);
+
 
     case EOF: return false;
 
@@ -148,7 +167,6 @@ bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineN
     case DONE:
     case SIMPLE: 
       com.type = SIMPLE_COMMAND;
-      switch ()
 
     default:  fprintf(stderr, "%d: syntax error\n", lineNum); exit(-1);
   }
