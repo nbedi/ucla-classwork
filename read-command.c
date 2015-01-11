@@ -368,18 +368,25 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
             }
             else bad_error(lineNum);
 
-          // case SEMICOLON:
-          //   com.type = SEQUENCE_COMMAND;
-          //   com->u.command[0] = tempCom;
-          //   command_t secondCom;
-          //   next_word = get_next_word(buffer, &it, bufSize);
-
-          //   if (get_command (buffer, int &it, int bufSize, command_t &secondCom, int &lineNum))
-          //   {
-          //     com->u.command[1] = *(secondCom);
-          //     return true;
-          //   }
-          //   else return bad_error(lineNum);
+          // TODO: SEQUENCE STATEMENTS
+          case SEMICOLON:
+            int seqIt = it;
+            next_word = get_next_word(buffer, &it, bufSize);
+            if (next_word.type == NEWLINE || next_word.type == EOF)
+            {
+              com = tempCom;
+              return true;
+            }
+            else 
+            {
+              com.type = SEQUENCE_COMMAND;
+              com->u.command[0] = tempCom;
+              command_t secondCom;
+              get_command (buffer, &seqIt, bufSize, &secondCom, &lineNum);
+              com->u.command[1] = *(secondCom);
+              it = seqIt;
+              return true;
+            }  
 
           case LPARENS:
 
@@ -394,8 +401,6 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
             }
             return true;
 
-          // TODO: SEQUENCE STATEMENTS
-          case SEMICOLON:
           case NEWLINE:
           case EOF:
             com = tempCom;
