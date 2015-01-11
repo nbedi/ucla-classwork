@@ -30,12 +30,128 @@ struct command_node {
   struct command_node* next;
   struct command_node* prev;
 }
+
 struct command_stream {
   struct command_node* current_node;
 }
 
+struct word {
+  enum word_type type;
+  char *string;
+}
 
-bool get_command (char *buffer, int &it, int bufSize, command_t &com){
+enum word_type{
+  IF,
+  THEN,
+  ELSE,
+  FI,
+  WHILE,
+  DO,
+  DONE,
+  UNTIL,
+  SEMICOLON,
+  PIPE,
+  LPARENS,
+  RPARENS,
+  INPUT,
+  OUTPUT,
+  COMMENT,
+  NEWLINE,
+  EOF,
+  SIMPLE
+}
+
+word get_next_word (char *buffer, int &it, int bufSize) 
+{
+  word newWord;
+  if (it == bufSize) 
+  {
+    newWord.type = EOF;
+    return newWord;
+  }
+}
+
+void bad_error (int lineNum)
+{
+  fprintf(stderr, "%d: syntax error\n", lineNum); 
+  exit(-1);
+}
+
+bool get_command (char *buffer, int &it, int bufSize, command_t &com, int &lineNum)
+{
+  word next_word = get_next_word(buffer, &it, bufSize);
+  com.status = -1;
+  command_t newCom;
+
+  switch (next_word.type) 
+  {
+    case IF:
+      com.type = IF_COMMAND;
+      com->u.command[0] = newCom;
+      if (get_command(buffer, &it, bufSize, newCom, &lineNum))
+      {
+          next_word = get_next_word(buffer, &it, bufSize);
+          if (next_word.type == THEN)
+          {
+              command_t thenCom;
+              com->u.command[1] = thenCom;
+              if (get_command(buffer, &it, bufSize, thenCom, &lineNum))
+              {
+                  next_word = get_next_word(buffer, &it, bufSize);
+                  if (next_word.type == ELSE)
+                  {
+                    command_t elseCom;
+                    com->u.command[2] = elseCom;
+                    if (get_command(buffer, &it, bufSize, elseCom, &lineNum))
+                    {
+                        next_word = get_next_word(buffer, &it, bufSize);
+                        if (next_word.type == FI)
+                        {
+                          return true;
+                        }
+                        else bad_error(lineNume);
+                    }
+                    else bad_error(lineNume);
+                  }
+                  else if (next_word.type == FI)
+                  {
+                    return true;
+                  }
+                  else bad_error(lineNume);
+              }
+              else bad_error(lineNume);
+          }
+          else bad_error(lineNume);
+      }
+      else bad_error(lineNume);
+
+    case WHILE:
+      com.type = WHILE_COMMAND;
+
+    case UNTIL:
+      com.type = UNTIL_COMMAND;
+    
+    case SEMICOLON:
+      com.type = SIMPLE_COMMAND;
+    
+    case LPARENS:
+      com.type = SUBSHELL_COMMAND;
+
+    case COMMENT:
+
+    case EOF: return false;
+
+    case THEN:
+    case ELSE:
+    case FI:
+    case DO:
+    case DONE:
+    case SIMPLE: 
+      com.type = SIMPLE_COMMAND;
+      switch ()
+
+    default:  fprintf(stderr, "%d: syntax error\n", lineNum); exit(-1);
+  }
 
 }
 
@@ -66,7 +182,8 @@ make_command_stream (int (*get_next_byte) (void *),
     }
   }
 
-  char currentPos = 0;
+  int currentPos = 0;
+  int lineNum = 0;
   // initialize command stream
   command_stream_t command_stream;
   // initialize first node
@@ -78,7 +195,7 @@ make_command_stream (int (*get_next_byte) (void *),
   firstCommandNode->command = firstCommand;
   command_t currentCommand = currentCommandNode.command;
 
-  while (get_command(buffer, currentPos, byte_count, currentCommand))
+  while (get_command(buffer, currentPos, byte_count, currentCommand, lineNum))
   {
     // create new node
     command_node newCommandNode;
