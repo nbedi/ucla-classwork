@@ -17,9 +17,13 @@
 
 #include "command.h"
 #include "command-internals.h"
+#include "alloc.h"
 
 #include <error.h>
 #include <string.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
 
 /* FIXME: You may need to add #include directives, macro definitions,
    static function definitions, etc.  */
@@ -32,22 +36,19 @@
 //              STRUCT DEFINITIONS & AUXILARY FUNCTIONS
 //***********************************************************************
 
+typedef struct command_node *command_node_t;
+
 struct command_node {
-  struct command* command;
-  struct command_node* next;
-  struct command_node* prev;
-}
+  command_t command;
+  command_node_t next;
+  command_node_t prev;
+};
 
-struct command_stream {
-  struct command_node* current_node;
-}
+struct command_stream{
+  command_node_t current_node;
+};
 
-struct word {
-  enum word_type type;
-  char *string;
-}
-
-enum word_type {
+typedef enum {
   IF,
   THEN,
   ELSE,
@@ -64,12 +65,17 @@ enum word_type {
   OUTPUT,
   COMMENT,
   NEWLINE,
-  EOF,
-  SIMPLE
-};
+  END,
+  SIMPLE,
+} word_type;
 
-void bad_error(int lineNum) {
-  fprintf(stderr, "%d: syntax error\n", lineNum);
+typedef struct {
+  word_type type;
+  char *string;
+} word;
+
+void bad_error(int* lineNum) {
+  fprintf(stderr, "%d: syntax error\n", *lineNum);
   exit(-1);
 }
 
@@ -78,67 +84,67 @@ void bad_error(int lineNum) {
 //                            GET NEXT WORD
 //***********************************************************************
 
-word get_next_word(char *buffer, int &it, int bufSize, int &lineNum) {
+word get_next_word(char* buffer, int* it, int bufSize, int* lineNum) {
   word w;
   
-  // deal with EOF
-  if (it == bufSize) {
-    w.type = EOF;
+  // deal with END
+  if (*it == bufSize) {
+    w.type = END;
     return w;
   }
   
   // remove beginning whitespace
-  while (buffer[it] == ' ' || buffer[it] == '\t') {
-    it++;
-    if (it == bufSize) {
-      w.type = EOF;
+  while (buffer[*it] == ' ' || buffer[*it] == '\t') {
+    (*it)++;
+    if (*it == bufSize) {
+      w.type = END;
       return w;
     }
   }
   
   // deal with single-char tokens, ; | ( ) < > #
   // don't need to update string component of the word bc we don't use it
-  char c = buffer[it];
+  char c = buffer[*it];
   switch (c) {
     case ';':
       w.type = SEMICOLON;
-      it++;
+      (*it) = (*it) + 1;
       return w;
     case '|':
       w.type = PIPE;
-      it++;
+      (*it) = (*it) + 1;
       return w;
     case '(':
       w.type = LPARENS;
-      it++;
+      (*it) = (*it) + 1;
       return w;
     case ')':
       w.type = RPARENS;
-      it++;
+      (*it) = (*it) + 1;
       return w;
     case '<':
       w.type = INPUT;
-      it++;
+      (*it) = (*it) + 1;
       return w;
     case '>':
       w.type = OUTPUT;
-      it++;
+      (*it) = (*it) + 1;
       return w;
       
     // TODO: double check, not sure if right
     case '\n':
       w.type = NEWLINE;
-      lineNum++;
-      it++;
+      (*lineNum) = (*lineNum) + 1;
+      (*it) = (*it) + 1;
       return w;
       
     case '#':
       w.type = COMMENT;
-      while (buffer[it] != '\n' || it != bufSize)
-        it++;
-      if (it != bufSize) {
-        it++;  // move past new line, point to start of next word
-        lineNum++;
+      while (buffer[*it] != '\n' || *it != bufSize)
+        (*it) = (*it) + 1;
+      if (*it != bufSize) {
+        (*it) = (*it) + 1;  // move past new line, point to start of next word
+        (*lineNum) = (*lineNum) + 1;
       }
       return w;
       
@@ -146,23 +152,26 @@ word get_next_word(char *buffer, int &it, int bufSize, int &lineNum) {
       break;
   }
   
-  
   // deal with words
   // TODO: deal with realloc if word len exceeds 16
   int wordLen = 16;
-  w.string = checked_malloc(sizeof(wordLen));
-  
+  w.string = (char*)checked_malloc(sizeof(wordLen));
   
   // create string
   int stringIndex = 0;
-  while (buffer[it] != ' ' && buffer[it] != '\t' && buffer[it] != '\n' && it != bufSize) {
-    w.string[stringIndex] = buffer[it];
-    it++;
+  while (buffer[*it] != ' ' && buffer[*it] != '\t' && buffer[*it] != '\n' && *it != bufSize) {
+    if (!(isalpha(buffer[*it]) || isdigit(buffer[*it]) ||
+          buffer[*it]=='!' || buffer[*it]=='%' || buffer[*it]=='+' ||
+          buffer[*it]==',' || buffer[*it]=='-' || buffer[*it]=='.' ||
+          buffer[*it]=='/' || buffer[*it]==':' || buffer[*it]=='@' ||
+          buffer[*it]=='^' || buffer[*it]=='_'
+        ))
+      bad_error(lineNum);
+    w.string[stringIndex] = buffer[*it];
+    (*it) = (*it) + 1;
     stringIndex++;
   }
   w.string[stringIndex] = '\0';
-  
-  
   
   // assign special words
   if (strcmp(w.string, "if") == 0) {
@@ -197,45 +206,39 @@ word get_next_word(char *buffer, int &it, int bufSize, int &lineNum) {
     w.type = SIMPLE;
     return w;
   }
-  
-  
-  
 }
-
 
 //***********************************************************************
 //                            GET COMMAND
 //***********************************************************************
 
-bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNum) {
-  word next_word = get_next_word(buffer, &it, bufSize, &lineNum);
-  com.status = -1;
-  command_t newCom;
+int get_command(char *buffer, int* it, int bufSize, command_t com, int* lineNum) {
+  word next_word = get_next_word(buffer, it, bufSize, lineNum);
+  com->status = -1;
+  command_t newCom = checked_malloc(sizeof(struct command));
 
   switch (next_word.type) {
-      
-      
     case IF:
-      com.type = IF_COMMAND;
+      com->type = IF_COMMAND;
       // IF
-      com->u.command[0] = *(newCom);
-      if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-          next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+      com->u.command[0] = newCom;
+      if (get_command(buffer, it, bufSize, newCom, lineNum)) {
+          next_word = get_next_word(buffer, it, bufSize, lineNum);
           // THEN
           if (next_word.type == THEN) {
-              command_t thenCom;
-              com->u.command[1] = *(thenCom);
-              if (get_command(buffer, &it, bufSize, &thenCom, &lineNum)) {
-                  next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+              command_t thenCom = checked_malloc(sizeof(struct command));
+              com->u.command[1] = thenCom;
+              if (get_command(buffer, it, bufSize, thenCom, lineNum)) {
+                  next_word = get_next_word(buffer, it, bufSize, lineNum);
                   // ELSE
                   if (next_word.type == ELSE) {
-                    command_t elseCom;
-                    com->u.command[2] = *(elseCom);
-                    if (get_command(buffer, &it, bufSize, &elseCom, &lineNum)) {
-                        next_word = gget_next_word(buffer, &it, bufSize, &lineNum);
+                    command_t elseCom = checked_malloc(sizeof(struct command));
+                    com->u.command[2] = elseCom;
+                    if (get_command(buffer, it, bufSize, elseCom, lineNum)) {
+                        next_word = get_next_word(buffer, it, bufSize, lineNum);
                         // FI AFTER ELSE
                         if (next_word.type == FI)
-                          return true;
+                          return 1;
                         else
                           bad_error(lineNum);
                     }
@@ -244,7 +247,7 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
                   }
                   // NO ELSE - STRAIGHT TO FI
                   else if (next_word.type == FI)
-                    return true;
+                    return 1;
                   else
                     bad_error(lineNum);
               }
@@ -257,23 +260,21 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
       else
         bad_error(lineNum);
 
-      
-      
     case WHILE:
-      com.type = WHILE_COMMAND;
+      com->type = WHILE_COMMAND;
       // WHILE
-      com->u.command[0] = *(newCom);
-      if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+      com->u.command[0] = newCom;
+      if (get_command(buffer, it, bufSize, newCom, lineNum)) {
+        next_word = get_next_word(buffer, it, bufSize, lineNum);
         // DO
         if (next_word.type == DO) {
-          command_t doCom;
-          com->u.command[1] = *(doCom);
-          if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+          command_t doCom = checked_malloc(sizeof(struct command));
+          com->u.command[1] = doCom;
+          if (get_command(buffer, it, bufSize, doCom, lineNum)) {
+            next_word = get_next_word(buffer, it, bufSize, lineNum);
             // DONE
             if (next_word.type == DONE)
-              return true;
+              return 1;
             else
               bad_error(lineNum);
           }
@@ -289,20 +290,20 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
       
       
     case UNTIL:
-      com.type = UNTIL_COMMAND;
+      com->type = UNTIL_COMMAND;
       // UNTIL
-      com->u.command[0] = *(newCom);
-      if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+      com->u.command[0] = newCom;
+      if (get_command(buffer, it, bufSize, newCom, lineNum)) {
+        next_word = get_next_word(buffer, it, bufSize, lineNum);
         // DO
         if (next_word.type == DO) {
-          command_t doCom;
-          com->u.command[1] = *(doCom);
-          if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+          command_t doCom = checked_malloc(sizeof(struct command));
+          com->u.command[1] = doCom;
+          if (get_command(buffer, it, bufSize, doCom, lineNum)) {
+            next_word = get_next_word(buffer, it, bufSize, lineNum);
             // DONE
             if (next_word.type == DONE)
-              return true;
+              return 1;
             else
               bad_error(lineNum);
           }
@@ -314,31 +315,28 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
       }
       else
         bad_error(lineNum);
-    
-      
-
       
     case LPARENS:
-      com.type = SUBSHELL_COMMAND;
-      if (get_command(buffer, &it, bufSize, &newCom, &lineNum)) {
-        next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+      com->type = SUBSHELL_COMMAND;
+      if (get_command(buffer, it, bufSize, newCom, lineNum)) {
+        next_word = get_next_word(buffer, it, bufSize, lineNum);
         if (next_word.type == RPARENS) {
-          com->u.command[0] = *(newCom);
-          return true;
+          com->u.command[0] = newCom;
+          return 1;
         }
         else bad_error(lineNum);
       }
-      else bad_error(lineNume);
+      else bad_error(lineNum);
 
 
     case COMMENT:
     case NEWLINE:
     case SEMICOLON:
-      return get_command(buffer, &it, bufSize, &com, &lineNum);
+      return get_command(buffer, it, bufSize, com, lineNum);
 
 
-    case EOF:
-      return false;
+    case END:
+      return 0;
 
     case THEN:
     case ELSE:
@@ -346,65 +344,72 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
     case DO:
     case DONE:
     case SIMPLE: 
+      ;
       // make temporary command
-      command tempCom;
-      tempCom.type = SIMPLE_COMMAND;
+      command_t tempCom = checked_malloc(sizeof(struct command));
+      tempCom->type = SIMPLE_COMMAND;
       //TODO FIX ALLOCATION MAYBE
       tempCom->u.word = checked_malloc(sizeof(char*)*10);
-      tempCom->u.word[word_count] = checked_malloc(sizeof(char)*10);
-      tempCom->u.word[word_count] = next_word.string;
+      tempCom->u.word[0] = checked_malloc(sizeof(char)*10);
+      tempCom->u.word[0] = next_word.string;
       int word_count = 1;
 
-
-      next_word = get_next_word(buffer, &it, bufSize);
+      next_word = get_next_word(buffer, it, bufSize, lineNum);
       switch(next_word.type) {
           case PIPE:
-            com.type = PIPE_COMMAND;
+            com->type = PIPE_COMMAND;
             com->u.command[0] = tempCom;
-            command_t secondCom;
-            if (get_command (buffer, &it, bufSize, &secondCom, &lineNum)) {
-              com->u.command[1] = *(secondCom);
-              return true;
+            command_t secondCom = checked_malloc(sizeof(struct command));
+            if (get_command(buffer, it, bufSize, secondCom, lineNum)) {
+              com->u.command[1] = secondCom;
+              return 1;
             }
             else bad_error(lineNum);
 
           // TODO: SEQUENCE STATEMENTS
           case SEMICOLON:
-            int seqIt = it;
-            next_word = get_next_word(buffer, &it, bufSize);
-            if (next_word.type == NEWLINE || next_word.type == EOF)
+            ;
+            int* seqIt = &(*it);
+            next_word = get_next_word(buffer, it, bufSize, lineNum);
+            if (next_word.type == NEWLINE || next_word.type == END)
             {
               com = tempCom;
-              return true;
+              return 1;
             }
             else 
             {
-              com.type = SEQUENCE_COMMAND;
+              com->type = SEQUENCE_COMMAND;
               com->u.command[0] = tempCom;
-              command_t secondCom;
-              get_command (buffer, &seqIt, bufSize, &secondCom, &lineNum);
-              com->u.command[1] = *(secondCom);
+              command_t secondCom = checked_malloc(sizeof(struct command));
+              get_command(buffer, seqIt, bufSize, secondCom, lineNum);
+              com->u.command[1] = secondCom;
               it = seqIt;
-              return true;
+              return 1;
             }  
 
           case LPARENS:
+            return 0;
+
+          case RPARENS:    
+            return 0;       
 
           case INPUT:
+            return 0;
 
           case OUTPUT:
+            return 0;
 
           case COMMENT:
-            next_word = get_next_word(buffer, &it, bufSize, &lineNum);
-            while (next_word.type != NEWLINE && next_word.type != EOF) {
-              next_word = get_next_word(buffer, &it, bufSize, &lineNum);
+            next_word = get_next_word(buffer, it, bufSize, lineNum);
+            while (next_word.type != NEWLINE && next_word.type != END) {
+              next_word = get_next_word(buffer, it, bufSize, lineNum);
             }
-            return true;
+            return 1;
 
           case NEWLINE:
-          case EOF:
+          case END:
             com = tempCom;
-            return true;
+            return 1;
 
           case IF:
           case THEN:
@@ -415,6 +420,7 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
           case DONE:
           case UNTIL:
           case SIMPLE:
+            return 0;
 
           default:
             bad_error(lineNum);
@@ -422,7 +428,7 @@ bool get_command(char *buffer, int &it, int bufSize, command_t &com, int &lineNu
     default:
       bad_error(lineNum);
   }
-
+  return 0;
 }
 
 
@@ -441,13 +447,14 @@ make_command_stream (int (*get_next_byte) (void *),
   
   char *buffer;
   int current_size = 1024;
-  buffer = checked_malloc(sizeof(current_size));
+  buffer = (char*)checked_malloc(sizeof(current_size));
   int byte_count = 0;
-  while (true) {
-    int c = *(get_next_byte)(get_next_byte_argument);
+  for(;;) {
+    int c = get_next_byte(get_next_byte_argument);
     if (byte_count == current_size) {
       current_size = current_size*2;
-      buffer = checked_grow_alloc(buffer, sizeof(current_size));
+      size_t size_size = sizeof(current_size);
+      buffer = (char*)checked_grow_alloc((void*)buffer, &(size_size));
     }
     if (c != EOF) {
       buffer[byte_count] = c;
@@ -466,36 +473,37 @@ make_command_stream (int (*get_next_byte) (void *),
   int lineNum = 0;
   
   // initialize command stream
-  command_stream_t command_stream;
+  command_stream_t command_stream = checked_malloc(sizeof(struct command_stream));
   
   // initialize first node
-  command_node firstCommandNode;
+  command_node_t firstCommandNode = checked_malloc(sizeof(struct command_node));
   command_stream->current_node = firstCommandNode;
-  command_node *currentCommandNode = command_stream.current_node;
+  command_node_t currentCommandNode = command_stream->current_node;
   
   // initialize first command
-  command firstCommand;
+  command_t firstCommand = checked_malloc(sizeof(struct command));
   firstCommandNode->command = firstCommand;
-  command_t currentCommand = currentCommandNode.command;
+  command_t currentCommand = currentCommandNode->command;
 
-  while (get_command(buffer, &currentPos, byte_count, &currentCommand, &lineNum)) {
+  while (get_command(buffer, &currentPos, byte_count, currentCommand, &lineNum) == 1) {
     // create new node
-    command_node newCommandNode;
-    newCommandNode->prev = *(currentCommandNode);
+    command_node_t newCommandNode = checked_malloc(sizeof(struct command_node));
+    newCommandNode->prev = currentCommandNode;
     currentCommandNode->next = newCommandNode;
-    currentCommandNode = currentCommandNode.next;
+    currentCommandNode = currentCommandNode->next;
 
     // create new command for that node
-    command newCommand;
+    command_t newCommand = checked_malloc(sizeof(struct command));
     newCommandNode->command = newCommand;
-    currentCommand = currentCommandNode.command;
+    currentCommand = currentCommandNode->command;
   }
   
   if (currentCommandNode->prev != NULL) // couldn't add first command
-    currentCommandNode->prev.next = NULL;
+    currentCommandNode->prev->next = NULL;
   else
-    command_stream.current_node = NULL;
+    command_stream->current_node = NULL;
 
+  return command_stream;
 }
 
 
@@ -507,8 +515,8 @@ make_command_stream (int (*get_next_byte) (void *),
 command_t
 read_command_stream (command_stream_t s) {
   if (s->current_node) {
-    command_node current_node = s->current_node;
-    s.current_node = current_node.next;
+    command_node_t current_node = s->current_node;
+    s->current_node = current_node->next;
     return current_node->command;
   }
   else
