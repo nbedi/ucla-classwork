@@ -296,6 +296,13 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
 
         case INPUT:
           next_word = get_next_word(buffer, it, bufSize, lineNum);
+          if (next_word.type == NEWLINE || next_word.type == SEMICOLON || next_word.type == END ||
+              next_word.type == PIPE || next_word.type == LPARENS || next_word.type == RPARENS ||
+              next_word.type == INPUT || next_word.type == OUTPUT)
+          {
+            bad_error(lineNum, __LINE__);
+            return 0;
+          }
           tempCom->input = next_word.string;
           int t = *it;
           int* inIt = &(t);
@@ -303,15 +310,30 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
           if (next_word.type == OUTPUT)
           {
             next_word = get_next_word(buffer, inIt, bufSize, lineNum);
+            if (next_word.type == NEWLINE || next_word.type == SEMICOLON || next_word.type == END ||
+              next_word.type == PIPE || next_word.type == LPARENS || next_word.type == RPARENS ||
+              next_word.type == INPUT || next_word.type == OUTPUT)
+            {
+              bad_error(lineNum, __LINE__);
+              return 0;
+            }
             tempCom->output = next_word.string;
             *it = *inIt;
           }
-          return generate_from_simple(tempCom, word_count, buffer, it, bufSize, com, lineNum);
+          return 1;
 
         case OUTPUT:
           next_word = get_next_word(buffer, it, bufSize, lineNum);
+          //TODO: CORNER CASE: COMMENT,
+          if (next_word.type == NEWLINE || next_word.type == SEMICOLON || next_word.type == END ||
+              next_word.type == PIPE || next_word.type == LPARENS || next_word.type == RPARENS ||
+              next_word.type == INPUT || next_word.type == OUTPUT)
+          {
+            bad_error(lineNum, __LINE__);
+            return 0;
+          }
           tempCom->output = next_word.string;
-          return generate_from_simple(tempCom, word_count, buffer, it, bufSize, com, lineNum);
+          return 1;
 
         case COMMENT:
           next_word = get_next_word(buffer, it, bufSize, lineNum);
