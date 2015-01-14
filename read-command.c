@@ -142,8 +142,7 @@ word get_next_word(char* buffer, int* it, int bufSize, int* lineNum) {
       w.string = ">";
       (*it) = (*it) + 1;
       return w;
-      
-    // TODO: double check, not sure if right
+
     case '\n':
       w.type = NEWLINE;
       w.string = "\n";
@@ -167,8 +166,7 @@ word get_next_word(char* buffer, int* it, int bufSize, int* lineNum) {
   }
   
   // deal with words
-  // TODO: deal with realloc if word len exceeds 16
-  int wordLen = 128;
+  int wordLen = 64;
   w.string = (char*)checked_malloc(sizeof(char)*wordLen);
   
   // create string
@@ -178,6 +176,12 @@ word get_next_word(char* buffer, int* it, int bufSize, int* lineNum) {
         buffer[*it] != ')' && buffer[*it] != '<' && buffer[*it] != '>' && 
         *it != bufSize) 
   {
+    if (stringIndex == wordLen)
+    {
+      wordLen = wordLen*2;
+      size_t size_size = sizeof(char)*wordLen;
+      w.string = (char*)checked_grow_alloc((void*)w.string, &(size_size));
+    }
     if (!(isalpha(buffer[*it]) || isdigit(buffer[*it]) ||
           buffer[*it]=='!' || buffer[*it]=='%' || buffer[*it]=='+' ||
           buffer[*it]==',' || buffer[*it]=='-' || buffer[*it]=='.' ||
@@ -245,6 +249,7 @@ word get_next_word(char* buffer, int* it, int bufSize, int* lineNum) {
 int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* it, int bufSize, command_t com, int* lineNum)
 {
     word next_word = get_next_word(buffer, it, bufSize, lineNum);
+    //command_t newCom = checked_malloc(sizeof(struct command));
 
     switch(next_word.type) {
         case PIPE:
@@ -264,7 +269,6 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
           int s = *it;
           int* seqIt = &(s);
           next_word = get_next_word(buffer, it, bufSize, lineNum);
-          //TODO: Corner cases
           if (next_word.type == NEWLINE || next_word.type == END || next_word.type == THEN
               || next_word.type == ELSE || next_word.type == DO || next_word.type == DONE
               || next_word.type == FI)
@@ -284,10 +288,30 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
             return 1;
           }  
 
-        //TODO: CORNER CASE
         case LPARENS:
+          // NOTE: subshells cannot be a part of simple commands in bash so disregard
+          // tempCom->u.word[1] = checked_malloc(sizeof(char)*128);
+          // next_word = get_next_word(buffer, it, bufSize, lineNum);
+          // char* tempString = checked_malloc(sizeof(char)*128);
+          // tempString = next_word.string;
+
+          // while (next_word.type != RPARENS) {
+          //   next_word = get_next_word(buffer, it, bufSize, lineNum);
+          //   strcat(tempString, next_word.string);
+          //   if (next_word.type == NEWLINE || next_word.type == END ||
+          //     next_word.type == PIPE || next_word.type == LPARENS)
+          //   {
+          //     bad_error(lineNum, __LINE__);
+          //     return 0;
+          //   }
+          // }
+          // strcat(tempString, next_word.string);
+          // *(tempCom->u.word[1]) = *tempString;
+          // *com = *tempCom;
+          // return 1;
           bad_error(lineNum, __LINE__);
           return 0;
+          
 
         case RPARENS:
           *it = (*it)-1;
@@ -349,7 +373,15 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
           *com = *tempCom;
           return 1;
 
-        //TODO: Multiple words
+        case SIMPLE:
+          ;
+          int word_len = strlen(next_word.string);
+          tempCom->u.word[word_count] = checked_malloc(sizeof(char)*word_len);
+          strcpy(tempCom->u.word[word_count], next_word.string);
+          *com = *tempCom;
+          word_count++;
+          return generate_from_simple(tempCom, word_count, buffer, it, bufSize, com, lineNum);
+
         case IF:
         case THEN:
         case ELSE:
@@ -358,12 +390,6 @@ int generate_from_simple(command_t tempCom, int word_count, char* buffer, int* i
         case DO:
         case DONE:
         case UNTIL:
-        case SIMPLE:
-          tempCom->u.word[word_count] = next_word.string;
-          *com = *tempCom;
-          word_count++;
-          return generate_from_simple(tempCom, word_count, buffer, it, bufSize, com, lineNum);
-
         default:
           bad_error(lineNum, __LINE__);
           return 0;
@@ -454,10 +480,10 @@ int get_command(char* buffer, int* it, int bufSize, command_t com, int* lineNum)
 
         if (next_word.type != DO)
         {
-          //TODO: CORNER CASE, more than 2
           whileCom->type = SEQUENCE_COMMAND;
           whileCom->u.command[1] = checked_malloc(sizeof(struct command));
           newCom = whileCom->u.command[1];
+          whileCom = whileCom->u.command[1];
           *it = *whileIt;
           w++;
         }
@@ -468,7 +494,6 @@ int get_command(char* buffer, int* it, int bufSize, command_t com, int* lineNum)
           else
             com->u.command[0] = whileWhileCom;
 
-          //TODO: Corner cases (list of functions after do)
           command_t doCom = checked_malloc(sizeof(struct command));
           com->u.command[1] = doCom;
           if (get_command(buffer, it, bufSize, doCom, lineNum)) {
@@ -522,7 +547,6 @@ int get_command(char* buffer, int* it, int bufSize, command_t com, int* lineNum)
 
         if (next_word.type != DO)
         {
-          //TODO: CORNER CASES
           untilCom->type = SEQUENCE_COMMAND;
           untilCom = untilCom->u.command[1];
           untilCom = newCom;
@@ -598,9 +622,12 @@ int get_command(char* buffer, int* it, int bufSize, command_t com, int* lineNum)
       // make temporary command
       command_t tempCom = checked_malloc(sizeof(struct command));
       tempCom->type = SIMPLE_COMMAND;
-      //TODO FIX ALLOCATION MAYBE
-      tempCom->u.word = checked_malloc(sizeof(char*)*64);
-      tempCom->u.word[0] = checked_malloc(sizeof(char)*64);
+
+      //TODO FIX ALLOCATION MAYBE (number of words)
+      tempCom->u.word = checked_malloc(sizeof(char*)*128);
+
+      int word_len = strlen(next_word.string);
+      tempCom->u.word[0] = checked_malloc(sizeof(char)*word_len);
       tempCom->u.word[0] = next_word.string;
       
       int word_count = 1;
@@ -630,19 +657,18 @@ make_command_stream (int (*get_next_byte) (void *),
   //         CREATE & ALLOCATE BUFFER
   //*****************************************
   
-  char buffer[2048]="";
-  int current_size = 2048;
-  //TODO: ALLOCATE MEMORY BETTER SOON
-  //buffer = (char*)checked_malloc(sizeof(current_size));
+  
+  int current_size = 1024;
+  char* buffer = (char*)checked_malloc(sizeof(char)*current_size);
   int byte_count = 0;
   for(;;) {
     int c = get_next_byte(get_next_byte_argument);
-    //TODO: ALLOCATE MEMORY
-    // if (byte_count == current_size) {
-    //   current_size = current_size*2;
-    //   size_t size_size = sizeof(current_size);
-    //   buffer = (char*)checked_grow_alloc((void*)buffer, &(size_size));
-    // }
+
+    if (byte_count == current_size) {
+      current_size = current_size*2;
+      size_t size_size = sizeof(char)*current_size;
+      buffer = (char*)checked_grow_alloc((void*)buffer, &(size_size));
+    }
     if (c != EOF && byte_count < current_size) {
       buffer[byte_count] = c;
       byte_count++;
