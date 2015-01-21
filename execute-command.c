@@ -99,24 +99,39 @@ execute_command(command_t c, int profiling) {
 
 
 void execute_if(command_t c) {
-  
-  int condition;
-  // TODO: evaluate (and execute?) command[0] as true or false, store result in condition
-  if (condition)
+  evaluate_command(c->u.command[0]);
+  int condition = c->u.command[0]->status;
+  // todo: returns 0 if successful??
+  if (c->u.command[0]->status == 0)
     execute_command(c->u.command[1]);
   else if (c->u.command[2] != NULL)
     execute_command(c->u.command[2]);
-  
 }
 
 
 void execute_until(command_t c) {
-  // TODO
+  int condition;
+  for(;;) {
+    evaluate_command(c->u.command[0]);
+    condition = c->u.command[0]->status;
+    if (c->u.command[0]->status != 0)
+      execute_command(c->u.command[1]);
+    else
+      break;
+  }
 }
 
 
 void execute_while(command_t c) {
-  // TODO
+  int condition;
+  for(;;) {
+    evaluate_command(c->u.command[0]);
+    condition = c->u.command[0]->status;
+    if (c->u.command[0]->status != 0)
+      break;
+    else
+      execute_command(c->u.command[1]);;
+  }
 }
 
 
@@ -124,7 +139,7 @@ void execute_sequence(command_t c) {
   execute_io(c);
   execute_command(c->u.command[0]);
   execute_command(c->u.command[1]);
-  // TODO: how does status work?? c->status = c->u.command[1]->status;
+  c->status = c->u.command[1]->status;
 }
 
 
@@ -145,14 +160,15 @@ void execute_simple(command_t c) {
     // wait for child to finish
     if (waitpid(pid, &status, 0) == -1)
       error(1, 0, "error with child proccess exiting simple command");
-    c->status = status;
+    // TODO: check
+    c->status = WEXITSTATUS(status);
   }
   // child process
   else if (pid == 0) {
     execute_io(c);
     // first argument: name of file to execute, second: next arguments
-    execvp(c->word[0], c->u.word); // execute the commands
-    // TODO: what to put here? error or exit or something? what if it fails?
+    if (execvp(c->word[0], c->u.word) < 0)
+      error(1, 0, "command not found");
   }
   else
     error(1, 0, "error with forking");
@@ -163,7 +179,7 @@ void execute_simple(command_t c) {
 void execute_subshell(command_t c) {
   execute_io(c);
   execute_command(c->u.command[0]);
-  // TODO: how does status work?? c->status = c->u.command[0]->status;
+  c->status = c->u.command[0]->status;
 }
 
 
