@@ -19,6 +19,11 @@
 #include "command-internals.h"
 
 #include <error.h>
+#include <unistd.h>    // fork
+#include <sys/types.h> // pid_t, execvp
+#include <sys/wait.h>  // waitpid
+#include <stdlib.h>
+#include <stdio.h>
 
 
 //***********************************************************************
@@ -62,6 +67,7 @@ prepare_profiling (char const *name) {
 
 void
 execute_command(command_t c, int profiling) {
+  // TODO: what is the "profiling" int passed as a parameter??
   switch (c->type) {
       
     case IF_COMMAND:
@@ -89,14 +95,13 @@ execute_command(command_t c, int profiling) {
       error (1, 0, "command not found");
   }
   
-  execute_io(c);
 }
 
 
 void execute_if(command_t c) {
   
   int condition;
-  // TODO: evaluate command[0] as true or false, store result in condition
+  // TODO: evaluate (and execute?) command[0] as true or false, store result in condition
   if (condition)
     execute_command(c->u.command[1]);
   else if (c->u.command[2] != NULL)
@@ -116,7 +121,10 @@ void execute_while(command_t c) {
 
 
 void execute_sequence(command_t c) {
-  // TODO
+  execute_io(c);
+  execute_command(c->u.command[0]);
+  execute_command(c->u.command[1]);
+  // TODO: how does status work?? c->status = c->u.command[1]->status;
 }
 
 
@@ -126,17 +134,64 @@ void execute_pipe(command_t c) {
 
 
 void execute_simple(command_t c) {
-  // TODO
+  // if fork function is successful, it returns twice: once in child process with
+  // return value "0" and again in the parent process with child's PID as its return
+  // value.
+  pid_t pid = fork();
+  
+  // parent process
+  if (pid > 0) {
+    int status;
+    // wait for child to finish
+    if (waitpid(pid, &status, 0) == -1)
+      error(1, 0, "error with child proccess exiting simple command");
+    c->status = status;
+  }
+  // child process
+  else if (pid == 0) {
+    execute_io(c);
+    // first argument: name of file to execute, second: next arguments
+    execvp(c->word[0], c->u.word); // execute the commands
+    // TODO: what to put here? error or exit or something? what if it fails?
+  }
+  else
+    error(1, 0, "error with forking");
+  
 }
 
 
 void execute_subshell(command_t c) {
-  // TODO
+  execute_io(c);
+  execute_command(c->u.command[0]);
+  // TODO: how does status work?? c->status = c->u.command[0]->status;
 }
 
 
 void execute_io(command_t c) {
-  // TODO
+  // input
+  if (c->input != NULL) {
+    int in = open(c->input, O_RDONLY); // read only
+    if (in < 0)
+      error(1, 0, "error opening input file");
+    if (dup2(in, 0) < 0) // 0 refers to stdin
+      error(1, 0, "error in dup2: input file");
+    if (close(in) < 0)
+      error(1, 0, "error closing input file");
+  }
+  // output
+  if (c->output != NULL) {
+    int out = open(c->output, O_CREAT |  // O_CREAT: if file doesn't exist, create it
+                              O_TRUNC |  // O_TRUNC: initally clear all data from file
+                              O_WRONLY,  // write only
+                              S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP);
+                              // 3rd parameter modes: mean user + group can read/write
+    if (out < 0)
+      error(1, 0, "error opening output file");
+    if (dup2(out, 0) < 1) // 1 refers to stdout
+      error(1, 0, "error in dup2: output file");
+    if (close(out) < 0)
+      error(1, 0, "error closing output file");
+  }
 }
 
 
