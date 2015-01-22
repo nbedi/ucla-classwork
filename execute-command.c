@@ -18,9 +18,12 @@
 #include "command.h"
 #include "command-internals.h"
 
+#include <string.h>
 #include <error.h>
 #include <unistd.h>    // fork
 #include <sys/types.h> // pid_t, execvp
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/wait.h>  // waitpid
 #include <stdlib.h>
 #include <stdio.h>
@@ -58,6 +61,10 @@ prepare_profiling (char const *name) {
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
+  if (strcmp(name, ""))
+  {
+    ;
+  }
   error (0, 0, "warning: profiling not yet implemented");
   return -1;
 }
@@ -69,6 +76,10 @@ prepare_profiling (char const *name) {
 void
 execute_command(command_t c, int profiling) {
   // TODO: what is the "profiling" int passed as a parameter??
+  if (profiling == 1)
+  {
+    ;
+  }
   switch (c->type) {
       
     case IF_COMMAND:
@@ -100,8 +111,7 @@ execute_command(command_t c, int profiling) {
 
 
 void execute_if(command_t c) {
-  evaluate_command(c->u.command[0]);
-  int condition = c->u.command[0]->status;
+  execute_command(c->u.command[0], 0);
   // todo: returns 0 if successful??
   if (c->u.command[0]->status == 0)
     execute_command(c->u.command[1], 0);
@@ -113,9 +123,9 @@ void execute_if(command_t c) {
 void execute_until(command_t c) {
   int condition;
   for(;;) {
-    evaluate_command(c->u.command[0]);
+    execute_command(c->u.command[0], 0);
     condition = c->u.command[0]->status;
-    if (c->u.command[0]->status != 0)
+    if (condition != 0)
       execute_command(c->u.command[1], 0);
     else
       break;
@@ -126,9 +136,9 @@ void execute_until(command_t c) {
 void execute_while(command_t c) {
   int condition;
   for(;;) {
-    evaluate_command(c->u.command[0]);
+    execute_command(c->u.command[0], 0);
     condition = c->u.command[0]->status;
-    if (c->u.command[0]->status != 0)
+    if (condition != 0)
       break;
     else
       execute_command(c->u.command[1], 0);;
@@ -205,9 +215,10 @@ void execute_simple(command_t c) {
   }
   // child process
   else if (pid == 0) {
+
     execute_io(c);
     // first argument: name of file to execute, second: next arguments
-    if (execvp(c->word[0], c->u.word) < 0)
+    if (execvp(c->u.word[0], c->u.word) < 0)
       error(1, 0, "command not found");
   }
   else
@@ -226,6 +237,7 @@ void execute_subshell(command_t c) {
 void execute_io(command_t c) {
   // input
   if (c->input != NULL) {
+    close(0);
     int in = open(c->input, O_RDONLY); // read only
     if (in < 0)
       error(1, 0, "error opening input file");
@@ -243,7 +255,7 @@ void execute_io(command_t c) {
                               // 3rd parameter modes: mean user + group can read/write
     if (out < 0)
       error(1, 0, "error opening output file");
-    if (dup2(out, 0) < 1) // 1 refers to stdout
+    if (dup2(out, 1) < 1) // 1 refers to stdout
       error(1, 0, "error in dup2: output file");
     if (close(out) < 0)
       error(1, 0, "error closing output file");
