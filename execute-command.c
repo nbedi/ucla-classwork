@@ -35,6 +35,7 @@ void execute_until(command_t c);
 void execute_while(command_t c);
 void execute_sequence(command_t c);
 void execute_pipe(command_t c);
+void do_pipe(int fd[], command_t c);
 void execute_simple(command_t c);
 void execute_subshell(command_t c);
 void execute_io(command_t c);
@@ -103,9 +104,9 @@ void execute_if(command_t c) {
   int condition = c->u.command[0]->status;
   // todo: returns 0 if successful??
   if (c->u.command[0]->status == 0)
-    execute_command(c->u.command[1]);
+    execute_command(c->u.command[1], 0);
   else if (c->u.command[2] != NULL)
-    execute_command(c->u.command[2]);
+    execute_command(c->u.command[2], 0);
 }
 
 
@@ -115,7 +116,7 @@ void execute_until(command_t c) {
     evaluate_command(c->u.command[0]);
     condition = c->u.command[0]->status;
     if (c->u.command[0]->status != 0)
-      execute_command(c->u.command[1]);
+      execute_command(c->u.command[1], 0);
     else
       break;
   }
@@ -130,21 +131,60 @@ void execute_while(command_t c) {
     if (c->u.command[0]->status != 0)
       break;
     else
-      execute_command(c->u.command[1]);;
+      execute_command(c->u.command[1], 0);;
   }
 }
 
 
 void execute_sequence(command_t c) {
   execute_io(c);
-  execute_command(c->u.command[0]);
-  execute_command(c->u.command[1]);
+  execute_command(c->u.command[0], 0);
+  execute_command(c->u.command[1], 0);
   c->status = c->u.command[1]->status;
 }
 
 
 void execute_pipe(command_t c) {
-  // TODO
+  int fd[2];
+  pid_t pid = fork();
+  
+  pipe(fd);
+  
+  if (pid > 0) { // parent
+    int status;
+    if (waitpid(pid, &status, 0) == -1)
+      error(1, 0, "error with child proccess exiting simple command");
+    // TODO: status of parent
+  }
+  
+  else if (pid == 0) // child
+    do_pipe(fd, c);
+  
+  else
+    error(1, 0, "error with forking");
+
+}
+
+
+void do_pipe(int fd[], command_t c) {
+  
+  pid_t pid = fork();
+  
+  if (pid > 0) {    // parent - write end of the pipe
+    dup2(fd[1], 1); // stdout
+    close(fd[0]);   // doesn't need it
+    execute_command(c->u.command[0], 0);
+  }
+  
+  else if (pid == 0) { // child - read end of the pipe
+    dup2(fd[0], 0);    // stdin
+    close(fd[1]);      // doesn't need it
+    execute_command(c->u.command[1], 0);
+  }
+  
+  else
+    error(1, 0, "error with pipe");
+  
 }
 
 
@@ -178,7 +218,7 @@ void execute_simple(command_t c) {
 
 void execute_subshell(command_t c) {
   execute_io(c);
-  execute_command(c->u.command[0]);
+  execute_command(c->u.command[0], 0);
   c->status = c->u.command[0]->status;
 }
 
