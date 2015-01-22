@@ -18,10 +18,11 @@ cat test.txt
 #while
 
 #sequence
-echo a;echo b;echo c;
+echo a;echo b;echo c;echo d;
 
 #pipe
 echo capitalize this | tr a-z A-Z
+echo ls | tr a-z A-Z
 
 #subshell
 (ls)

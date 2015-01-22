@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/wait.h>  // waitpid
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -38,7 +40,6 @@ void execute_until(command_t c);
 void execute_while(command_t c);
 void execute_sequence(command_t c);
 void execute_pipe(command_t c);
-void do_pipe(int fd[], command_t c);
 void execute_simple(command_t c);
 void execute_subshell(command_t c);
 void execute_io(command_t c);
@@ -80,6 +81,10 @@ execute_command(command_t c, int profiling) {
   {
     ;
   }
+  if (profiling == 0) {
+    ;
+  }
+  
   switch (c->type) {
       
     case IF_COMMAND:
@@ -156,19 +161,64 @@ void execute_sequence(command_t c) {
 
 void execute_pipe(command_t c) {
   int fd[2];
-  pid_t pid = fork();
   
-  pipe(fd);
+  if (pipe(fd) == -1)
+    error(1, 0, "error creating pipe");
+  pid_t first_pid = fork();
   
-  if (pid > 0) { // parent
-    int status;
-    if (waitpid(pid, &status, 0) == -1)
-      error(1, 0, "error with child proccess exiting simple command");
-    // TODO: status of parent
+  
+  // OUTER PARENT
+  if (first_pid > 0) {
+    pid_t second_pid = fork();
+    
+    // INNER PARENT - waits for all to finish, cleans up
+    if (second_pid > 0) {
+      if (close(fd[0]) < 0)
+        error(1, 0, "error closing");
+      if (close(fd[1]) < 0)
+        error(1, 0, "error closing");
+      pid_t first_finished;
+      int status;
+      first_finished = waitpid(-1, &status, 0);
+      // second command finished first - want that status
+      if (first_finished == first_pid) {
+        c->status = status;
+        if (waitpid(second_pid, &status, 0) == -1)
+          error(1, 0, "error with child proccess exiting simple command");
+      }
+      // first command finished first - want status of second command
+      else if (first_finished == second_pid) {
+        if (waitpid(first_pid, &status, 0) == -1)
+          error(1, 0, "error with child proccess exiting simple command");
+        c->status = status;
+      }
+      else
+        error(1, 0, "error in parent of forking");
+    }
+    
+    // INNER CHILD - does first command
+    else if (second_pid == 0) {
+      if (dup2(fd[1], 1) < 0)
+        error(1, 0, "error in dup2");
+      if (close(fd[0]) < 0)
+        error(1, 0, "error closing");
+      execute_command(c->u.command[0], 0);
+      _exit(c->u.command[0]->status);
+    }
+    
+    else
+      error(1, 0, "error with forking");
   }
   
-  else if (pid == 0) // child
-    do_pipe(fd, c);
+  // OUTER CHILD - does second command
+  else if (first_pid == 0) {
+    if (dup2(fd[0], 0) < 0)
+      error(1, 0, "error in dup2");
+    if (close(fd[1]) < 0)
+      error(1, 0, "error closing");
+    execute_command(c->u.command[1], 0);
+    _exit(c->u.command[1]->status);
+  }
   
   else
     error(1, 0, "error with forking");
@@ -176,26 +226,6 @@ void execute_pipe(command_t c) {
 }
 
 
-void do_pipe(int fd[], command_t c) {
-  
-  pid_t pid = fork();
-  
-  if (pid > 0) {    // parent - write end of the pipe
-    dup2(fd[1], 1); // stdout
-    close(fd[0]);   // doesn't need it
-    execute_command(c->u.command[0], 0);
-  }
-  
-  else if (pid == 0) { // child - read end of the pipe
-    dup2(fd[0], 0);    // stdin
-    close(fd[1]);      // doesn't need it
-    execute_command(c->u.command[1], 0);
-  }
-  
-  else
-    error(1, 0, "error with pipe");
-  
-}
 
 
 void execute_simple(command_t c) {
@@ -237,7 +267,6 @@ void execute_subshell(command_t c) {
 void execute_io(command_t c) {
   // input
   if (c->input != NULL) {
-    close(0);
     int in = open(c->input, O_RDONLY); // read only
     if (in < 0)
       error(1, 0, "error opening input file");
