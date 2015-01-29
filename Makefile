@@ -21,7 +21,7 @@
 
 CC = gcc
 WERROR_CFLAGS = -Werror
-CFLAGS = -g -Wall -Wextra $(WERROR_CFLAGS)
+CFLAGS = -g -Wall -Wextra $(WERROR_CFLAGS) -lrt
 LAB = 1
 DISTDIR = lab1-$(USER)
 CHECK_DIST = ./check-dist

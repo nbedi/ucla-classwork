@@ -17,6 +17,7 @@
 
 #include "command.h"
 #include "command-internals.h"
+#include "alloc.h"
 
 #include <string.h>
 #include <error.h>
@@ -29,20 +30,21 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h> //profiling
 
 
 //***********************************************************************
 //                    FUNCTION DECLARATIONS
 //***********************************************************************
 
-void execute_if(command_t c);
-void execute_until(command_t c);
-void execute_while(command_t c);
-void execute_sequence(command_t c);
-void execute_pipe(command_t c);
-void execute_simple(command_t c);
-void execute_subshell(command_t c);
-void execute_io(command_t c);
+void execute_if(command_t c, int profiling);
+void execute_until(command_t c, int profiling);
+void execute_while(command_t c, int profiling);
+void execute_sequence(command_t c, int profiling);
+void execute_pipe(command_t c, int profiling);
+void execute_simple(command_t c, int profiling);
+void execute_subshell(command_t c, int profiling);
+void execute_io(command_t c, int profiling);
 
 //***********************************************************************
 //                    AUXILARY FUNCTIONS
@@ -62,13 +64,111 @@ prepare_profiling (char const *name) {
   /* FIXME: Replace this with your implementation.  You may need to
      add auxiliary functions and otherwise modify the source code.
      You can also use external functions defined in the GNU C Library.  */
-  if (strcmp(name, ""))
-  {
-    ;
-  }
-  error (0, 0, "warning: profiling not yet implemented");
-  return -1;
+
+  int prof_file = open(name, O_CREAT |  // O_CREAT: if file doesn't exist, create it
+                          O_TRUNC |  // O_TRUNC: initally clear all data from file
+                          O_WRONLY,  // write only
+                          S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP);
+                          // 3rd parameter modes: mean user + group can read/write
+  if (prof_file < 0)
+    error(1, 0, "error opening output file");
+  // if (dup2(prof_file, 1) < 1) // 1 refers to stdout
+    // error(1, 0, "error in dup2: output file");
+
+  return prof_file;
 }
+
+//***********************************************************************
+//                    INITIAL_PROFILING
+//***********************************************************************
+
+// time_t
+// initial_profiling (char **command_name, int fd) {
+
+// }
+
+
+//***********************************************************************
+//                    EXECUTE_PROFILING
+//***********************************************************************
+
+void
+execute_profiling (char **command_name, int fd) {
+  char* buffer = checked_malloc(sizeof(char)*1024);
+  int buffer_index = 0;
+  struct timespec *p_timespec = checked_malloc(sizeof(struct timespec));
+
+  time_t time_finished = 0;
+  time_t time_finished_nano = 0;
+  // time_t real_time = 0;
+  // time_t user_cpu_time = 0;
+  // time_t command_cpu_time = 0;
+  //TODO: trailing zeros
+  if (!(clock_gettime(CLOCK_REALTIME, p_timespec)<0))
+  {
+    fflush(stdout);
+    time_finished = p_timespec->tv_sec;
+    time_finished_nano = p_timespec->tv_nsec;
+  }
+
+  double output_time = 0.0;
+  output_time = ((double)time_finished_nano)/1000000000;
+  output_time = (double)time_finished+ output_time;
+
+  char* time_finished_string = checked_malloc(sizeof(char)*1024);
+  sprintf(time_finished_string, "%f", output_time);
+
+  //TODO figure out for all stuff
+  int i;
+  for (i=0; time_finished_string[i]!='\0' && buffer_index < 1023; i++)
+  {
+    buffer[buffer_index] = time_finished_string[i];
+    buffer_index++;
+  }
+  if (buffer_index < 1023)
+  {
+    buffer[buffer_index] = ' ';
+    buffer_index++;
+  }
+
+  int j;
+  int k;
+  //TODO segfault
+  for (j =0; command_name[j]!=NULL&& buffer_index < 1023; j++)
+  {
+    for (k=0; command_name[j][k]!='\0'&& buffer_index < 1023; k++)
+    {
+      if (command_name[j][k]=='\n')
+      {
+        buffer[buffer_index] = ' ';
+        buffer_index++;
+      }
+      else
+      {
+        buffer[buffer_index] = command_name[j][k];
+        buffer_index++;
+      }
+    }
+    if (buffer_index < 1023)
+    {
+      buffer[buffer_index] = ' ';
+      buffer_index++;
+    }
+  }
+  if (buffer_index < 1023)
+  {
+    buffer[buffer_index]='\n';
+    buffer_index++;
+  }
+
+  buffer[buffer_index] = '\0';
+
+  if (write(fd, buffer, sizeof(char)*buffer_index) < 0)
+  {
+    error(1, 0, "error writing profile");
+  }
+}
+
 
 //***********************************************************************
 //                    EXECUTE COMMAND
@@ -88,25 +188,25 @@ execute_command(command_t c, int profiling) {
   switch (c->type) {
       
     case IF_COMMAND:
-      execute_if(c);
+      execute_if(c, profiling);
       break;
     case UNTIL_COMMAND:
-      execute_until(c);
+      execute_until(c, profiling);
       break;
     case WHILE_COMMAND:
-      execute_while(c);
+      execute_while(c, profiling);
       break;
     case SEQUENCE_COMMAND:
-      execute_sequence(c);
+      execute_sequence(c, profiling);
       break;
     case PIPE_COMMAND:
-      execute_pipe(c);
+      execute_pipe(c, profiling);
       break;
     case SIMPLE_COMMAND:
-      execute_simple(c);
+      execute_simple(c, profiling);
       break;
     case SUBSHELL_COMMAND:
-      execute_subshell(c);
+      execute_subshell(c, profiling);
       break;
     default:
       error (1, 0, "command not found");
@@ -115,58 +215,58 @@ execute_command(command_t c, int profiling) {
 }
 
 
-void execute_if(command_t c) {
-  execute_command(c->u.command[0], 0);
+void execute_if(command_t c, int profiling) {
+  execute_command(c->u.command[0], profiling);
   // todo: returns 0 if successful??
   if (c->u.command[0]->status == 0)
-    execute_command(c->u.command[1], 0);
+    execute_command(c->u.command[1], profiling);
   else if (c->u.command[2] != NULL)
-    execute_command(c->u.command[2], 0);
+    execute_command(c->u.command[2], profiling);
 }
 
 
-void execute_until(command_t c) {
+void execute_until(command_t c, int profiling) {
   int condition;
   for(;;) {
-    execute_command(c->u.command[0], 0);
+    execute_command(c->u.command[0], profiling);
     condition = c->u.command[0]->status;
     if (condition != 0)
-      execute_command(c->u.command[1], 0);
+      execute_command(c->u.command[1], profiling);
     else
       break;
   }
 }
 
 
-void execute_while(command_t c) {
+void execute_while(command_t c, int profiling) {
   int condition;
   for(;;) {
-    execute_command(c->u.command[0], 0);
+    execute_command(c->u.command[0], profiling);
     condition = c->u.command[0]->status;
     if (condition != 0)
       break;
     else
-      execute_command(c->u.command[1], 0);;
+      execute_command(c->u.command[1], profiling);
   }
 }
 
 
-void execute_sequence(command_t c) {
-  execute_io(c);
-  execute_command(c->u.command[0], 0);
-  execute_command(c->u.command[1], 0);
+void execute_sequence(command_t c, int profiling) {
+  execute_io(c, profiling);
+  execute_command(c->u.command[0], profiling);
+  execute_command(c->u.command[1], profiling);
   c->status = c->u.command[1]->status;
 }
 
 
-void execute_pipe(command_t c) {
+void execute_pipe(command_t c, int profiling) {
   int fd[2];
   
   if (pipe(fd) == -1)
     error(1, 0, "error creating pipe");
-  pid_t first_pid = fork();
-  
-  
+
+  pid_t first_pid = fork(); 
+
   // OUTER PARENT
   if (first_pid > 0) {
     pid_t second_pid = fork();
@@ -183,6 +283,7 @@ void execute_pipe(command_t c) {
       // second command finished first - want that status
       if (first_finished == first_pid) {
         c->status = status;
+        execute_profiling(c->u.word, profiling); 
         if (waitpid(second_pid, &status, 0) == -1)
           error(1, 0, "error with child proccess exiting simple command");
       }
@@ -202,12 +303,12 @@ void execute_pipe(command_t c) {
         error(1, 0, "error in dup2");
       if (close(fd[0]) < 0)
         error(1, 0, "error closing");
-      execute_command(c->u.command[0], 0);
+      execute_command(c->u.command[0], profiling);
       _exit(c->u.command[0]->status);
     }
     
     else
-      error(1, 0, "error with forking");
+      error(1, 0, "error with forking"); 
   }
   
   // OUTER CHILD - does second command
@@ -216,7 +317,7 @@ void execute_pipe(command_t c) {
       error(1, 0, "error in dup2");
     if (close(fd[1]) < 0)
       error(1, 0, "error closing");
-    execute_command(c->u.command[1], 0);
+    execute_command(c->u.command[1], profiling);
     _exit(c->u.command[1]->status);
   }
   
@@ -228,7 +329,7 @@ void execute_pipe(command_t c) {
 
 
 
-void execute_simple(command_t c) {
+void execute_simple(command_t c, int profiling) {
   // if fork function is successful, it returns twice: once in child process with
   // return value "0" and again in the parent process with child's PID as its return
   // value.
@@ -242,11 +343,12 @@ void execute_simple(command_t c) {
       error(1, 0, "error with child proccess exiting simple command");
     // TODO: check
     c->status = WEXITSTATUS(status);
+    execute_profiling(c->u.word, profiling); 
   }
   // child process
   else if (pid == 0) {
 
-    execute_io(c);
+    execute_io(c, profiling);
     // first argument: name of file to execute, second: next arguments
     if (execvp(c->u.word[0], c->u.word) < 0)
       error(1, 0, "command not found");
@@ -257,15 +359,20 @@ void execute_simple(command_t c) {
 }
 
 
-void execute_subshell(command_t c) {
-  execute_io(c);
-  execute_command(c->u.command[0], 0);
+void execute_subshell(command_t c, int profiling) {
+  execute_io(c, profiling);
+  execute_command(c->u.command[0], profiling);
   c->status = c->u.command[0]->status;
 }
 
 
-void execute_io(command_t c) {
+void execute_io(command_t c, int profiling) {
   // input
+  if (profiling)
+  {
+    ;
+  }
+
   if (c->input != NULL) {
     int in = open(c->input, O_RDONLY); // read only
     if (in < 0)

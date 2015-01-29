@@ -624,7 +624,7 @@ int get_command(char* buffer, int* it, int bufSize, command_t com, int* lineNum)
       tempCom->type = SIMPLE_COMMAND;
 
       //TODO FIX ALLOCATION MAYBE (number of words)
-      tempCom->u.word = checked_malloc(sizeof(char*)*128);
+      tempCom->u.word = checked_malloc(sizeof(char*)*256);
 
       int word_len = strlen(next_word.string);
       tempCom->u.word[0] = checked_malloc(sizeof(char)*word_len);
