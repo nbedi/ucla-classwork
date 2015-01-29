@@ -21,16 +21,21 @@
 
 #include <string.h>
 #include <error.h>
-#include <unistd.h>    // fork
-#include <sys/types.h> // pid_t, execvp
+#include <unistd.h>      // fork
+#include <sys/types.h>   // pid_t, execvp
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/wait.h>  // waitpid
+#include <sys/wait.h>    // waitpid
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h> //profiling
+#include <time.h>         // profiling
+#include <sys/resource.h> // getrusage
+
+#ifndef RUSAGE_THREAD
+#define RUSAGE_THREAD 1
+#endif
 
 
 //***********************************************************************
@@ -61,19 +66,17 @@ command_status (command_t c) {
 
 int
 prepare_profiling (char const *name) {
-  /* FIXME: Replace this with your implementation.  You may need to
-     add auxiliary functions and otherwise modify the source code.
-     You can also use external functions defined in the GNU C Library.  */
 
-  int prof_file = open(name, O_CREAT |  // O_CREAT: if file doesn't exist, create it
-                          O_TRUNC |  // O_TRUNC: initally clear all data from file
-                          O_WRONLY,  // write only
-                          S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP);
-                          // 3rd parameter modes: mean user + group can read/write
+  // TODO: want to append to output file, not just clear all data
+  int prof_file = open(name, O_CREAT | // O_CREAT: if file doesn't exist, create it
+                             O_TRUNC |  // O_TRUNC: initally clear all data from file
+                             O_WRONLY,  // write only
+                             S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP);
+                             // 3rd parameter modes: mean user + group can read/write
   if (prof_file < 0)
     error(1, 0, "error opening output file");
   // if (dup2(prof_file, 1) < 1) // 1 refers to stdout
-    // error(1, 0, "error in dup2: output file");
+  // error(1, 0, "error in dup2: output file");
 
   return prof_file;
 }
@@ -94,79 +97,144 @@ prepare_profiling (char const *name) {
 
 void
 execute_profiling (char **command_name, int fd) {
+  
+  // buffer
   char* buffer = checked_malloc(sizeof(char)*1024);
   int buffer_index = 0;
+
+  // time values
+  double time_finished = 0.0;
+  // double real_time = 0;
+  double user_cpu_time = 0.0;
+  double system_cpu_time = 0.0;
+  
+  // STRING time values
+  char* time_finished_string = checked_malloc(sizeof(char)*128);
+  //char* real_time_string = checked_malloc(sizeof(char)*128);
+  char* user_cpu_string = checked_malloc(sizeof(char)*128);
+  char* system_cpu_string = checked_malloc(sizeof(char)*128);
+  
+  
+  
+  //--------------------------------------------------------------
+  // TIME COMMAND FINISHED
+  //--------------------------------------------------------------
+  
   struct timespec *p_timespec = checked_malloc(sizeof(struct timespec));
+  
+  // TODO: deal w/ error?
+  clock_gettime(CLOCK_REALTIME, p_timespec);
 
-  time_t time_finished = 0;
-  time_t time_finished_nano = 0;
-  // time_t real_time = 0;
-  // time_t user_cpu_time = 0;
-  // time_t command_cpu_time = 0;
-  //TODO: trailing zeros
-  if (!(clock_gettime(CLOCK_REALTIME, p_timespec)<0))
-  {
-    fflush(stdout);
-    time_finished = p_timespec->tv_sec;
-    time_finished_nano = p_timespec->tv_nsec;
-  }
-
-  double output_time = 0.0;
-  output_time = ((double)time_finished_nano)/1000000000;
-  output_time = (double)time_finished+ output_time;
-
-  char* time_finished_string = checked_malloc(sizeof(char)*1024);
-  sprintf(time_finished_string, "%f", output_time);
-
-  //TODO figure out for all stuff
+  // TODO: trailing zeros
+  time_finished = ((double)p_timespec->tv_nsec)/1000000000;
+  time_finished = (double)p_timespec->tv_sec + time_finished;
+  sprintf(time_finished_string, "%f", time_finished);
+  
+  // FILL BUFFER
   int i;
-  for (i=0; time_finished_string[i]!='\0' && buffer_index < 1023; i++)
-  {
+  for (i=0; time_finished_string[i]!='\0' && buffer_index < 1023; i++) {
     buffer[buffer_index] = time_finished_string[i];
     buffer_index++;
   }
-  if (buffer_index < 1023)
-  {
+  if (buffer_index < 1023) {
     buffer[buffer_index] = ' ';
     buffer_index++;
   }
 
+  //--------------------------------------------------------------
+  // REAL TIME: TODO
+  //--------------------------------------------------------------
+  
+  
+  
+  //--------------------------------------------------------------
+  // USER CPU TIME: TODO
+  //--------------------------------------------------------------
+  
+  struct rusage *p_rusage = checked_malloc(sizeof(struct rusage));
+  
+  // TODO: deal with error?
+  getrusage(RUSAGE_SELF, p_rusage);
+                
+  // TODO: trailing zeros
+  user_cpu_time = ((double)p_rusage->ru_utime.tv_usec)/1000000;
+  user_cpu_time = (double)p_rusage->ru_utime.tv_sec + user_cpu_time;
+  sprintf(user_cpu_string, "%f", user_cpu_time);
+  
+  
+  // FILL BUFFER
+  int l;
+  for (l=0; user_cpu_string[l]!='\0' && buffer_index < 1023; l++) {
+    buffer[buffer_index] = user_cpu_string[l];
+    buffer_index++;
+  }
+  if (buffer_index < 1023) {
+    buffer[buffer_index] = ' ';
+    buffer_index++;
+  }
+  
+  
+  //--------------------------------------------------------------
+  // SYSTEM CPU TIME: TODO
+  //--------------------------------------------------------------
+  
+  
+  // TODO: trailing zeros
+  system_cpu_time = ((double)p_rusage->ru_stime.tv_usec)/1000000;
+  system_cpu_time = (double)p_rusage->ru_stime.tv_sec + system_cpu_time;
+  sprintf(system_cpu_string, "%f", system_cpu_time);
+  
+  
+  // FILL BUFFER
+  int m;
+  for (m=0; system_cpu_string[m]!='\0' && buffer_index < 1023; m++) {
+    buffer[buffer_index] = system_cpu_string[m];
+    buffer_index++;
+  }
+  if (buffer_index < 1023) {
+    buffer[buffer_index] = ' ';
+    buffer_index++;
+  }
+  
+  
+  
+  //--------------------------------------------------------------
+  // COMMAND NAME
+  //--------------------------------------------------------------
+
   int j;
   int k;
   //TODO segfault
-  for (j =0; command_name[j]!=NULL&& buffer_index < 1023; j++)
-  {
-    for (k=0; command_name[j][k]!='\0'&& buffer_index < 1023; k++)
-    {
+  for (j =0; command_name[j]!=NULL&& buffer_index < 1023; j++) {
+    // each word in command
+    for (k=0; command_name[j][k]!='\0'&& buffer_index < 1023; k++) {
       if (command_name[j][k]=='\n')
-      {
         buffer[buffer_index] = ' ';
-        buffer_index++;
-      }
       else
-      {
         buffer[buffer_index] = command_name[j][k];
-        buffer_index++;
-      }
+      buffer_index++;
     }
-    if (buffer_index < 1023)
-    {
+    // space after word
+    if (buffer_index < 1023) {
       buffer[buffer_index] = ' ';
       buffer_index++;
     }
   }
-  if (buffer_index < 1023)
-  {
+  if (buffer_index < 1023) {
+    buffer_index--; // overwrite space
     buffer[buffer_index]='\n';
     buffer_index++;
   }
 
   buffer[buffer_index] = '\0';
 
+  
+  //--------------------------------------------------------------
+  // WRITE BUFFER TO FILE
+  //--------------------------------------------------------------
+  
   if (write(fd, buffer, sizeof(char)*buffer_index) < 0)
-  {
     error(1, 0, "error writing profile");
-  }
 }
 
 
@@ -176,14 +244,6 @@ execute_profiling (char **command_name, int fd) {
 
 void
 execute_command(command_t c, int profiling) {
-  // TODO: what is the "profiling" int passed as a parameter??
-  if (profiling == 1)
-  {
-    ;
-  }
-  if (profiling == 0) {
-    ;
-  }
   
   switch (c->type) {
       
@@ -217,7 +277,6 @@ execute_command(command_t c, int profiling) {
 
 void execute_if(command_t c, int profiling) {
   execute_command(c->u.command[0], profiling);
-  // todo: returns 0 if successful??
   if (c->u.command[0]->status == 0)
     execute_command(c->u.command[1], profiling);
   else if (c->u.command[2] != NULL)
@@ -360,6 +419,9 @@ void execute_simple(command_t c, int profiling) {
 
 
 void execute_subshell(command_t c, int profiling) {
+  
+  // TODO: fork for subshell
+  
   execute_io(c, profiling);
   execute_command(c->u.command[0], profiling);
   c->status = c->u.command[0]->status;
