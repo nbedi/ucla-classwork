@@ -67,10 +67,9 @@ command_status (command_t c) {
 int
 prepare_profiling (char const *name) {
 
-  // TODO: want to append to output file, not just clear all data
-  int prof_file = open(name, O_CREAT | // O_CREAT: if file doesn't exist, create it
-                             O_TRUNC |  // O_TRUNC: initally clear all data from file
-                             O_WRONLY,  // write only
+  int prof_file = open(name, O_CREAT |   // O_CREAT: if file doesn't exist, create it
+                             O_APPEND |  // O_TRUNC: append new info to end
+                             O_WRONLY,   // write only
                              S_IRUSR | S_IRGRP | S_IWUSR | S_IWGRP);
                              // 3rd parameter modes: mean user + group can read/write
   if (prof_file < 0)
@@ -96,7 +95,7 @@ prepare_profiling (char const *name) {
 //***********************************************************************
 
 void
-execute_profiling (char **command_name, int fd) {
+execute_profiling(char **command_name, int fd) {
   
   // buffer
   char* buffer = checked_malloc(sizeof(char)*1024);
@@ -148,13 +147,13 @@ execute_profiling (char **command_name, int fd) {
   
   
   //--------------------------------------------------------------
-  // USER CPU TIME: TODO
+  // USER CPU TIME
   //--------------------------------------------------------------
   
   struct rusage *p_rusage = checked_malloc(sizeof(struct rusage));
   
   // TODO: deal with error?
-  getrusage(RUSAGE_SELF, p_rusage);
+  getrusage(RUSAGE_THREAD, p_rusage);
                 
   // TODO: trailing zeros
   user_cpu_time = ((double)p_rusage->ru_utime.tv_usec)/1000000;
@@ -175,9 +174,8 @@ execute_profiling (char **command_name, int fd) {
   
   
   //--------------------------------------------------------------
-  // SYSTEM CPU TIME: TODO
+  // SYSTEM CPU TIME
   //--------------------------------------------------------------
-  
   
   // TODO: trailing zeros
   system_cpu_time = ((double)p_rusage->ru_stime.tv_usec)/1000000;
@@ -389,9 +387,7 @@ void execute_pipe(command_t c, int profiling) {
 
 
 void execute_simple(command_t c, int profiling) {
-  // if fork function is successful, it returns twice: once in child process with
-  // return value "0" and again in the parent process with child's PID as its return
-  // value.
+
   pid_t pid = fork();
   
   // parent process
@@ -420,21 +416,39 @@ void execute_simple(command_t c, int profiling) {
 
 void execute_subshell(command_t c, int profiling) {
   
-  // TODO: fork for subshell
+  pid_t pid = fork();
   
-  execute_io(c, profiling);
-  execute_command(c->u.command[0], profiling);
-  c->status = c->u.command[0]->status;
+  // string for profiling has pid in square brackets
+  char** pid_string = checked_malloc(sizeof(char*)*2);
+  pid_string[0] = checked_malloc(sizeof(char)*32);
+  pid_string[1] = NULL;
+  sprintf(pid_string[0], "[%d]", (int)pid);
+  
+  if (pid > 0) {
+    int status;
+    if (waitpid(pid, &status, 0) == -1)
+      error(1, 0, "error with child proccess exiting simple command");
+    c->status = c->u.command[0]->status;
+    execute_profiling(pid_string, profiling);
+  }
+  else if (pid == 0) {
+    execute_io(c, profiling);
+    execute_command(c->u.command[0], profiling);
+  }
+  else
+    error(1, 0, "error with forking");
+  
 }
 
 
 void execute_io(command_t c, int profiling) {
-  // input
+
   if (profiling)
   {
     ;
   }
 
+  // input
   if (c->input != NULL) {
     int in = open(c->input, O_RDONLY); // read only
     if (in < 0)
