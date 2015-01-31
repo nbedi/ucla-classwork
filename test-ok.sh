@@ -12,7 +12,7 @@ echo hello world > test.txt
 cat test.txt
 
 #input
-
+(sleep 0.1s)
 #until 
 
 #while
@@ -23,6 +23,8 @@ echo a;echo b;echo c;echo d;
 #pipe
 echo capitalize this | tr a-z A-Z
 echo ls | tr a-z A-Z
+
+sleep 0.16s
 
 #subshell
 (ls)

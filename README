@@ -3,3 +3,19 @@ CS 111 Lab 1.
 Neil Bedi 404018872
 McKenna Galvin 604290168
 
+Known limitation:
+Subshell does not work well... All attempts to fork did not go as expected so we stopped forking altogether. Instead the processid is the same as the one for the shell itself.
+
+Lab 1c Questions:
+
+Must the first column of the log output be in nondecreasing order? If not, give a counterexample.
+No, the first column can be skewed because we use CLOCK__REALTIME for the first column, which can be changed by a function like clock_settime() or daylight savings.
+
+Can the second column be less than the sum of the third and fourth columns, other than due to rounding errors? If so, explain why.
+No, the second column uses CLOCK_MONOTONIC which uses a arbitrary start time to calculate clock time and cannot be changed by outside functions. 
+
+Can the second, third, or fourth column ever be negative? Briefly explain.
+No, since the second column uses CLOCK_MONOTONIC, its value should be standard and always greater than the individual run times.
+
+How did you test your shell to make sure that log lines are not interleaved? If you used test scripts, submit a copy of the scripts as part of your submission tarball.
+Our implementation did not use parallelism in main so there were no cases where the log lines could be interleaved. 

@@ -20,7 +20,11 @@
 #include <getopt.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <time.h> 
+#include <sys/types.h>
+#include <unistd.h>
 
+#include "alloc.h"
 #include "command.h"
 
 static char const *program_name;
@@ -74,6 +78,8 @@ main (int argc, char **argv)
 	error (1, errno, "%s: cannot open", profile_name);
     }
 
+  double t = get_current_time();
+
   command_t last_command = NULL;
   command_t command;
   while ((command = read_command_stream (command_stream)))
@@ -89,6 +95,18 @@ main (int argc, char **argv)
 	  execute_command (command, profiling);
 	}
     }
+
+// Profile entire shell
+  if (profile_name)
+  {
+    // string for profiling has pid in square brackets
+    pid_t pid = getpid();
+    char** pid_string = checked_malloc(sizeof(char*)*2);
+    pid_string[0] = checked_malloc(sizeof(char)*32);
+    pid_string[1] = NULL;
+    sprintf(pid_string[0], "[%d]", (int)pid);
+    execute_profiling(pid_string, profiling, t);
+  }
 
   return print_tree || !last_command ? 0 : command_status (last_command);
 }
