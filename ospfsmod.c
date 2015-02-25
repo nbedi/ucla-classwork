@@ -1357,6 +1357,33 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
+  
+  
+  // test if conditional symlink (will start with phrase "root?")
+  if (strncmp(oi->oi>symlink, "root?", 5) == 0) {
+    
+    // find place where the : is and replace with null byte
+    int colon;
+    for (colon = 0; colon < strlen(oi->oi_symlink); colon++) {
+      if (oi->oi_symlink[colon] == ':') {
+        oi->oi_symlink[colon] = '\0';
+        break;
+      }
+    }
+    
+    // root follows first link (before null byte)
+    if (current->uid == 0) {
+      ns_set_link(nd, oi->oi_symlink + 5); // bypass "root?"
+      return (void *)0;
+    }
+    
+    // others follow second path
+    else {
+      ns_set_link(nd, oi->oi_symlink + colon + 1); // go past colon
+      return (void *)0;
+    }
+    
+  }
 
 	nd_set_link(nd, oi->oi_symlink);
 	return (void *) 0;
