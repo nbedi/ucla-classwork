@@ -663,8 +663,12 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT) {
+		return -1;
+	}
+	else {
+		return 0;
+	}
 }
 
 
@@ -682,8 +686,20 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	//block in inode, return -1
+	if(b < OSPFS_NDIRECT) {
+		return -1;
+	}
+	//check if doubly indirect necessary
+	else if(indir2_index(b) == -1) {
+		return 0;
+	}
+	//else doubly indirect block
+	else {
+		b -= OSPFS_NDIRECT + OSPFS_NINDIRECT;
+		return b / OSPFS_NINDIRECT;
+	}
+
 }
 
 
@@ -699,8 +715,13 @@ indir_index(uint32_t b)
 static int32_t
 direct_index(uint32_t b)
 {
-	// Your code here.
-	return -1;
+	if(b < OSPFS_NDIRECT) {
+		return b;
+	}
+	else {
+		b = b - OSPFS_NDIRECT;
+		return b % OSPFS_NINDIRECT;
+	}
 }
 
 
@@ -1357,33 +1378,6 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 	ospfs_symlink_inode_t *oi =
 		(ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
 	// Exercise: Your code here.
-  
-  
-  // test if conditional symlink (will start with phrase "root?")
-  if (strncmp(oi->oi>symlink, "root?", 5) == 0) {
-    
-    // find place where the : is and replace with null byte
-    int colon;
-    for (colon = 0; colon < strlen(oi->oi_symlink); colon++) {
-      if (oi->oi_symlink[colon] == ':') {
-        oi->oi_symlink[colon] = '\0';
-        break;
-      }
-    }
-    
-    // root follows first link (before null byte)
-    if (current->uid == 0) {
-      ns_set_link(nd, oi->oi_symlink + 5); // bypass "root?"
-      return (void *)0;
-    }
-    
-    // others follow second path
-    else {
-      ns_set_link(nd, oi->oi_symlink + colon + 1); // go past colon
-      return (void *)0;
-    }
-    
-  }
 
 	nd_set_link(nd, oi->oi_symlink);
 	return (void *) 0;
