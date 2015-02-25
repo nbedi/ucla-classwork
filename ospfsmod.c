@@ -1098,22 +1098,39 @@ create_blank_direntry(ospfs_inode_t *dir_oi)
 
 static int
 ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dentry) {
-	if (dst_dentry->d_name.len > OSPFS_MAXNAMELEN) {
+  
+  
+  // deal with invalid parameters
+  if (src_dentry == NULL || dir == NULL || dst_dentry == NULL)
+    return -EINVAL;
+  
+  // pointers to access inodes
+  ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+  ospfs_inode_t *src_oi = ospfs_inode(src_dentry->d_inode->i_ino);
+  
+  // name is too long
+	if (dst_dentry->d_name.len > OSPFS_MAXNAMELEN)
 		return -ENAMETOOLONG;
-	}
 
-	if (find_direntry(dir->i_ino, dst_dentry->d_name.name, dst_dentry->d_name.len)!=NULL) {
+  // file already exists in the dir
+	if (find_direntry(dir_oi, dst_dentry->d_name.name, dst_dentry->d_name.len)!=NULL)
 		return -EEXIST;
-	}
+  
+  // create empty directory
+  ospfs_direntry_t *new = create_blank_direntry(dir_oi);
+  
+  // error when creating blank directory (handles ENOSPC, etc)
+  if (IS_ERR(new))
+    return PTR_ERR(new);
+  
+  // update info for new entry
+  new->od_ino = src_dentry->d_inode->i_ino;
+  strncpy(new->od_name, dst_dentry->d_name.name, dst_dentry->d_name.len);
+  new->od_name[dst_dentry->d_name.len] = '\0';
+  src_oi->oi_nlink++;
 
-	if (!allocate_block()) {
-		return -ENOSPC;
-	}
-	//TODO EIO ERROR
+  return 0;
 
-	dst_dentry->d_inode->i_ino = src_dentry->d_inode->i_ino;
-
-	return -EINVAL;
 }
 
 // ospfs_create
