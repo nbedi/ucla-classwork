@@ -585,11 +585,16 @@ static uint32_t
 allocate_block(void)
 {
 	int j;
-	for(j=2;j<ospfs_super->os_firstinob;j++) {
+	for(j=OSPFS_FREEMAP_BLK;j<ospfs_super->os_firstinob;j++) {
 		void* block = ospfs_block(j);
 		int i;
-		for(i=3;i<OSPFS_BLKBITSIZE;i++) {
+    for(i=3; i<OSPFS_BLKBITSIZE; i++) {
+      
+      if ((j-OSPFS_FREEMAP_BLK)*OSPFS_BLKBITSIZE + i >= ospfs_super->os_nblocks) // no more blocks
+        break;
+      
 			if(bitvector_test(block, i)) {
+        bitvector_clear(block, i); // mark block as non-free
 				return (uint32_t)i;
 			}
 		}
@@ -613,14 +618,15 @@ allocate_block(void)
 static void
 free_block(uint32_t blockno)
 {
-	int blocknum = ((int)blockno)/OSPFS_BLKBITSIZE+2;
-	int bitnum = ((int)blockno)%OSPFS_BLKBITSIZE;
+	int blocknum = ((int)blockno)/OSPFS_BLKBITSIZE + OSPFS_FREEMAP_BLK;
+	int bitnum = ((int)blockno) % OSPFS_BLKBITSIZE;
 	void* block = ospfs_block(blocknum);
 
-	//check if boot, super or bitmap
-	if (blocknum == 2 && bitnum < ospfs_super->os_firstinob) {
+	// don't free reserved blocks
+	if (blockno < ospfs_super->os_firstinob + ospfs_super->os_ninodes/OSPFS_BLKINODES) {
 		return;
 	}
+  
 	bitvector_set(block, bitnum);
 }
 
