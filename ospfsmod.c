@@ -1168,7 +1168,55 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
 	/* EXERCISE: Your code here. */
-	return -EINVAL; // Replace this line
+
+  
+  
+  // deal with invalid parameters
+  if (dentry == NULL || dir == NULL || nd == NULL)
+    return -EINVAL;
+  
+  // name is too long
+  if (dentry->d_name.len > OSPFS_MAXNAMELEN)
+    return -ENAMETOOLONG;
+  
+  // file already exists in the dir
+  if (find_direntry(dir_oi, dentry->d_name.name, dentry->d_name.len)!=NULL)
+    return -EEXIST;
+  
+  // create new direntry
+  ospfs_direntry_t *newDirentry = create_blank_direntry(dir_oi);
+  if (IS_ERR(newDirentry))
+    return PTR_ERR(newDirentry);
+  
+  // find enmpty inode
+  ospfs_symink_inode_t *newInode;
+  while (entry_ino < ospfs_super->os_ninodes) {
+    newInode = ospfs_inode(entry_ino);
+    if (newInode->oi_nlink == 0) // found an empty one!
+      break;
+    entry_ino++;
+  }
+  
+  // if couldn't find an empty inode
+  if (entry_ino >= ospfs_super->os_ninodes)
+    return -ENOSPC;
+  
+  
+  // fill out info for new direntry
+  newDirentry->od_ino = entry_ino;
+  strncpy(newDirentry->od_name, dentry->d_name.name, dentry->d_name.len);
+  newDirentry->oi_name[newDirentry->d_name.len] = '\0';
+  
+  // fill out info for new inode entry
+  newInode->oi_size  = 0;
+  newInode->oi_ftype = OSPFS_FTYPE_REG;
+  newInode->oi_nlink = 1;
+  newInode->oi_mode  = mode;
+  memset(newInode->oi_direct, 0, sizeof(newInode->oi_direct[0] * OSPFS_NDIRECT));
+  newInode->oi_indirect  = 0;
+  newInode->oi_indirect2 = 0;
+  
+
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
@@ -1257,9 +1305,6 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
   newInode->oi_nlink = 1;
   strncpy(newInode->od_symlink, symname, strlen(symname));
   newInode->oi_symlink[newInode->oi_size] = '\0';
-  
-  return 0;
-  
   
   
 
