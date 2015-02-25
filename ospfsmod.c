@@ -546,6 +546,13 @@ ospfs_unlink(struct inode *dirino, struct dentry *dentry)
 
 	od->od_ino = 0;
 	oi->oi_nlink--;
+  
+  
+  // if the file wouldn't exist after this, actually delete it by changing size to 0
+  if (oi-oi_ftype != OSPFS_FTYPE_SYMLINK && oi->oi_nlink == 0)
+    return change_size(oi, 0);
+    
+  
 	return 0;
 }
 
