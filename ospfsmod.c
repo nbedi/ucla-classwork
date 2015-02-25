@@ -1116,10 +1116,10 @@ ospfs_link(struct dentry *src_dentry, struct inode *dir, struct dentry *dst_dent
 	if (find_direntry(dir_oi, dst_dentry->d_name.name, dst_dentry->d_name.len)!=NULL)
 		return -EEXIST;
   
-  // create empty directory
+  // create new directory entry
   ospfs_direntry_t *new = create_blank_direntry(dir_oi);
   
-  // error when creating blank directory (handles ENOSPC, etc)
+  // error when creating direntry (handles ENOSPC, etc)
   if (IS_ERR(new))
     return PTR_ERR(new);
   
@@ -1214,22 +1214,54 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	/* EXERCISE: Your code here. */
 
 
-	if (dst_dentry->d_name.len > OSPFS_MAXNAMELEN) {
-		return -ENAMETOOLONG;
-	}
+	
+  // deal with invalid parameters
+  if (src_dentry == NULL || dir == NULL || dst_dentry == NULL)
+    return -EINVAL;
+  
+  // name is too long
+  if (dst_dentry->d_name.len > OSPFS_MAXNAMELEN || strlen(symname) > OSPFS_MAXSYMLINKLEN)
+    return -ENAMETOOLONG;
+  
+  // file already exists in the dir
+  if (find_direntry(dir_oi, dst_dentry->d_name.name, dst_dentry->d_name.len)!=NULL)
+    return -EEXIST;
+  
+  // create new direntry
+  ospfs_direntry_t *newDirentry = create_blank_direntry(dir_oi);
+  if (IS_ERR(newDirentry))
+    return PTR_ERR(newDirentry);
+  
+  // find enmpty inode
+  ospfs_symink_inode_t *newInode;
+  while (entry_ino < ospfs_super->os_ninodes) {
+    newInode = ospfs_inode(entry_ino);
+    if (newInode->oi_nlink == 0) // found an empty one!
+      break;
+    entry_ino++;
+  }
+  
+  // if couldn't find an empty inode
+  if (entry_ino >= ospfs_super->os_ninodes)
+    return -ENOSPC;
+  
 
-	if (find_direntry(dir->i_ino, dst_dentry->d_name.name, dst_dentry->d_name.len)!=NULL) {
-		return -EEXIST;
-	}
-
-	if (!allocate_block()) {
-		return -ENOSPC;
-	}
-	//TODO EIO ERROR
-
-
-
-	return -EINVAL;
+  // fill out info for new direntry
+  newDirentry->od_ino = entry_ino;
+  strncpy(newDirentry->od_name, dentry->d_name.name, dentry->d_name.len);
+  newDirentry->oi_name[newDirentry->d_name.len] = '\0';
+  
+  // fill out info for new inode entry
+  newInode->oi_size  = strlen(symname);
+  newInode->oi_ftype = OSPFS_FTYPE_SYMLINK;
+  newInode->oi_nlink = 1;
+  strncpy(newInode->od_symlink, symname, strlen(symname));
+  newInode->oi_symlink[newInode->oi_size] = '\0';
+  
+  return 0;
+  
+  
+  
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
