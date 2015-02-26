@@ -664,6 +664,8 @@ static int32_t
 indir2_index(uint32_t b)
 {
 	// Your code here.
+  if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+    return 0;
 	return -1;
 }
 
@@ -683,6 +685,14 @@ static int32_t
 indir_index(uint32_t b)
 {
 	// Your code here.
+  
+  // b within doubly indirect block
+  if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+    return (b-(OSPFS_NDIRECT + OSPFS_NINDIRECT)) / OSPFS_NINDIRECT;
+  // b within indirect block
+  else if (b >= OSPFS_NDIRECT)
+    return 0;
+  // b within direct block
 	return -1;
 }
 
@@ -700,7 +710,15 @@ static int32_t
 direct_index(uint32_t b)
 {
 	// Your code here.
-	return -1;
+  
+  // b within doubly indirect block
+  if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
+    return (b-(OSPFS_NDIRECT + OSPFS_NINDIRECT)) % OSPFS_NINDIRECT;
+  // b within indirect block
+  else if (b >= OSPFS_NDIRECT)
+    return b - OSPFS_NDIRECT;
+  // b within direct block
+	return b;
 }
 
 
@@ -745,7 +763,109 @@ add_block(ospfs_inode_t *oi)
 	uint32_t *allocated[2] = { 0, 0 };
 
 	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+  
+  if (n<0)
+    return -EIO;
+  
+  uint32_t block;
+  uint32_t indirectBlock;
+  uint32_t indirectBlock2;
+  
+  // DOUBLY INDIRECT BLOCK
+  if (indir2_index(n) == 0) {
+    
+    if (oi->oi_indirect2 == NULL) {     // create doubly indirect block if doesn't exist
+      allocated[0] = allocate_block();
+      if (allocated[0] == 0)
+        return -ENOSPC;
+      oi->oi_indirect2 = allocated[0];
+      indirectBlock2 = ospfs_block(allocated[0]);
+      memset(indirectBlock2, 0, OSPFS_BLKSIZE);
+    }
+    else {
+      indirectBlock2 = ospfs_block(oi->oi_indirect2);
+    }
+    
+    
+    uint32_t index2 = indir_index(n);
+    
+    if(indirectBlock2[index2] == NULL) { // create indirect block if it doesn't exist
+      allocated[1] = allocate_block();
+      if (allocated[1] == 0) {
+        if (allocated[0] != NULL) {
+          free_block(allocated[0]);
+          oi->oi_indirect = NULL;
+        }
+        return -ENOSPC;
+      }
+      indirectBlock2[index2] = allocated[1];
+      indirectBlock = ospfs_block(allocated[1]);
+      memset(indirectBlock, 0, OSPFS_BLKSIZE);
+    }
+    else {
+      indirectBlock = ospfs_block(oi->oi_indirect2[index2]);
+    }
+    
+    
+    indirectBlock[direct_index(n)] = allocate_block();  // create direct block
+    if (indirectBlock[direct_index(n)] == 0) {
+      if (allocated[0] != NULL) {
+        free_block(allocated[0]);
+        oi->oi_indirect2 = NULL;
+      }
+      if (allocated[1] != NULL) {
+        free_block(allocated[1]);
+        oi->oi_indirect2[index2] = NULL;
+      }
+      return -ENOSPC;
+    }
+    
+    
+    oi->oi_size = (n+1)*OSPFS_BLKSIZE;
+    return 0;
+    
+  }
+  
+  // INDIRECT BLOCK
+  else if (indir_index(n) == 0) {
+    
+    if (oi->oi_indirect == NULL) {     // create indirect block if doesn't exist
+      allocated[0] = allocate_block();
+      if (allocated[0] == 0)
+        return -ENOSPC;
+      oi->oi_indirect = allocated[0];
+      indirectBlock = ospfs_block(allocated[0]);
+      memset(indirectBlock, 0, OSPFS_BLKSIZE);
+    }
+    else {
+      indirectBlock = ospfs_block(oi->oi_indirect);
+    }
+    
+    indirectBlock[direct_index(n)] = allocate_block();
+    if (indirectBlock[direct_index(n)] == 0) {
+      if (allocated[0] != NULL) {
+        free_block(allocated[0]);
+        oi->oi_indirect = NULL;
+      }
+      return -ENOSPC;
+    }
+    oi->oi_size = (n+1)*OSPFS_BLKSIZE;
+    return 0;
+    
+  }
+  
+  // DIRECT BLOCK
+  else {
+    block = allocate_block();
+    if (block == 0)
+      return -ENOSPC;
+    oi->oi_direct[n] = block;
+    oi->oi_size = (n+1)*OSPFS_BLKSIZE;
+    return 0;
+  }
+  
+  return -EIO;
+  
 }
 
 
