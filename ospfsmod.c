@@ -663,19 +663,10 @@ free_block(uint32_t blockno)
 static int32_t
 indir2_index(uint32_t b)
 {
-<<<<<<< HEAD
 	// Your code here.
   if (b >= OSPFS_NDIRECT + OSPFS_NINDIRECT)
     return 0;
 	return -1;
-=======
-	if(b < OSPFS_NDIRECT + OSPFS_NINDIRECT) {
-		return -1;
-	}
-	else {
-		return 0;
-	}
->>>>>>> origin/master
 }
 
 
@@ -693,7 +684,6 @@ indir2_index(uint32_t b)
 static int32_t
 indir_index(uint32_t b)
 {
-<<<<<<< HEAD
 	// Your code here.
   
   // b within doubly indirect block
@@ -704,22 +694,7 @@ indir_index(uint32_t b)
     return 0;
   // b within direct block
 	return -1;
-=======
-	//block in inode, return -1
-	if(b < OSPFS_NDIRECT) {
-		return -1;
-	}
-	//check if doubly indirect necessary
-	else if(indir2_index(b) == -1) {
-		return 0;
-	}
-	//else doubly indirect block
-	else {
-		b -= OSPFS_NDIRECT + OSPFS_NINDIRECT;
-		return b / OSPFS_NINDIRECT;
-	}
 
->>>>>>> origin/master
 }
 
 
@@ -735,7 +710,6 @@ indir_index(uint32_t b)
 static int32_t
 direct_index(uint32_t b)
 {
-<<<<<<< HEAD
 	// Your code here.
   
   // b within doubly indirect block
@@ -746,15 +720,6 @@ direct_index(uint32_t b)
     return b - OSPFS_NDIRECT;
   // b within direct block
 	return b;
-=======
-	if(b < OSPFS_NDIRECT) {
-		return b;
-	}
-	else {
-		b = b - OSPFS_NDIRECT;
-		return b % OSPFS_NINDIRECT;
-	}
->>>>>>> origin/master
 }
 
 
