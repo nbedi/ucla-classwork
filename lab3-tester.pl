@@ -91,6 +91,12 @@ close FOO;
       '15'
     ],
 
+    # symbolic link testing
+    [ 'echo foo > test/foo.txt; ' .
+      'ln -s foo.txt test/sym.txt && diff test/sym.txt test/foo.txt && rm test/sym.txt test/foo.txt',
+      ''
+    ],
+
 );
 
 my($ntest) = 0;
