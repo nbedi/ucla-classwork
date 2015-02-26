@@ -518,6 +518,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
   // Save the file position and return!
   filp->f_pos = f_pos;
   return r;
+
 }
 
 
@@ -775,10 +776,10 @@ add_block(ospfs_inode_t *oi)
   uint32_t index2;
   // current number of blocks in file
   uint32_t n = ospfs_size2nblocks(oi->oi_size);
-  
+
   // keep track of allocations to free in case of -ENOSPC
   uint32_t *allocated[2] = { 0, 0 };
-  
+
   /* EXERCISE: Your code here */
   if (n<0)
     return -EIO;
@@ -906,7 +907,7 @@ remove_block(ospfs_inode_t *oi)
   uint32_t* indirectBlock2;
   // current number of blocks in file
   uint32_t n = ospfs_size2nblocks(oi->oi_size);
-  
+
   if (n<=0)
     return -EIO;
   
@@ -946,8 +947,8 @@ remove_block(ospfs_inode_t *oi)
   
   // INDIRECT BLOCK
   else if (n > OSPFS_NDIRECT) {
-    
-    uint32_t temp;
+
+  	uint32_t temp;
     
     if (oi->oi_indirect == 0)
       return -EIO;
@@ -1301,12 +1302,14 @@ find_direntry(ospfs_inode_t *dir_oi, const char *name, int namelen)
 static ospfs_direntry_t *
 create_blank_direntry(ospfs_inode_t *dir_oi)
 {
-  // Outline:
-  // 1. Check the existing directory data for an empty entry.  Return one
-  //    if you find it.
-  // 2. If there's no empty entries, add a block to the directory.
-  //    Use ERR_PTR if this fails; otherwise, clear out all the directory
-  //    entries and return one of them.
+
+	// Outline:
+	// 1. Check the existing directory data for an empty entry.  Return one
+	//    if you find it.
+	// 2. If there's no empty entries, add a block to the directory.
+	//    Use ERR_PTR if this fails; otherwise, clear out all the directory
+	//    entries and return one of them.
+
   int temp;
   uint32_t offset;
   uint32_t size;
@@ -1441,7 +1444,7 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
   ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
   
   /* EXERCISE: Your code here. */
-  
+    
   // deal with invalid parameters
   if (dentry == NULL || dir == NULL || nd == NULL)
     return -EINVAL;
@@ -1534,8 +1537,7 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
   ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
   /* EXERCISE: Your code here. */
   
-  
-  
+
   // deal with invalid parameters
   if (dentry == NULL || dir == NULL || symname == NULL)
     return -EINVAL;
