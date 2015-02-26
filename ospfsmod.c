@@ -768,9 +768,9 @@ add_block(ospfs_inode_t *oi)
   if (n<0)
     return -EIO;
   
-  uint32_t block;
-  uint32_t indirectBlock;
-  uint32_t indirectBlock2;
+  uint32_t* block;
+  uint32_t* indirectBlock;
+  uint32_t* indirectBlock2;
   
   // DOUBLY INDIRECT BLOCK
   if (indir2_index(n) == 0) {
@@ -897,9 +897,77 @@ remove_block(ospfs_inode_t *oi)
 {
 	// current number of blocks in file
 	uint32_t n = ospfs_size2nblocks(oi->oi_size);
+  
 
-	/* EXERCISE: Your code here */
-	return -EIO; // Replace this line
+  if (n<=0)
+    return -EIO;
+  
+  uint32_t indirectBlock;
+  uint32_t indirectBlock2;
+  
+  // DOUBLY INDIRECT BLOCK
+  if (n > OSPFS_NDIRECT + OSPFS_NINDIRECT) {
+    
+    if (oi->oi_indirect2 == NULL)
+      return -EIO;
+    
+    indirectBlock2 = ospfs_block(oi->oi_indirect2);
+    
+    if (indirectBlock2[indir_index(n-1)] == NULL)
+      return -EIO;
+    
+    // free block
+    indirectBlock = ospfs_block(indirectBlock2[indir_index(n-1)]);
+    free_block(indirectBlock[direct_index(n-1)]);
+    indirectBlock[direct_index(n-1)] = NULL;
+    
+    // check if need to free indirect
+    if (n - 1 <= OSPFS_NDIRECT + OSPFS_NINDIRECT) {
+      free_block(indirectBlock2[indir_index(n-1)]);
+      indirectBlock2[indir_index(n-1)] = NULL;
+    }
+    
+    // check if need to free indirect2
+    if (n - 1 <= OSPFS_NDIRECT) {
+      free_block(oi->oi_indirect2);
+      oi->oi_indirect2 = NULL;
+    }
+    
+    oi->oi_size = (n-1)*OSPFS_BLKSIZE;
+    return 0;
+    
+  }
+  
+  // INDIRECT BLOCK
+  else if (n > OSPFS_NDIRECT) {
+    
+    if (oi->oi_indirect == NULL)
+      return -EIO;
+    
+    indirectBlock = ospfs_block(oi->oi_indirect);
+    free_block(indirectBlock[direct_index(n-1)]);
+    indirectBlock[direct_index(n-1)] = NULL;
+    
+    if (n - 1 <= OSPFS_NDIRECT) { // first in indirect block, must free indirect block
+      free_block(oi->oi_indirect);
+      oi->oi_indirect = NULL;
+    }
+    
+    oi->oi_size = (n-1)*OSPFS_BLKSIZE;
+    return 0;
+    
+  }
+  
+  // DIRECT BLOCK
+  else {
+    free_block(oi->oi_direct[n-1]);
+    oi->oi_direct[n-1] = NULL;
+    oi->oi_size = (n-1)*OSPFS_BLKSIZE;
+    return 0;
+  }
+  
+  return -EIO;
+  
 }
 
 
