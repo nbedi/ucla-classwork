@@ -428,7 +428,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
   uint32_t f_pos = filp->f_pos;
   int r = 0;    /* Error return value, if any */
   int ok_so_far = 0;  /* Return value from 'filldir' */
-  int f_type;
+  int f_type = 0;
   
   // f_pos is an offset into the directory's data, plus two.
   // The "plus two" is to account for "." and "..".
@@ -788,7 +788,7 @@ add_block(ospfs_inode_t *oi)
   if (indir2_index(n) == 0) {
     
     if (oi->oi_indirect2 == 0) {     // create doubly indirect block if doesn't exist
-      allocated[0] = allocate_block();
+      *allocated[0] = allocate_block();
       if (allocated[0] == 0)
         return -ENOSPC;
       oi->oi_indirect2 = *allocated[0];
@@ -802,7 +802,7 @@ add_block(ospfs_inode_t *oi)
     index2 = indir_index(n);
     
     if(indirectBlock2[index2] == 0) { // create indirect block if it doesn't exist
-      allocated[1] = allocate_block();
+      *allocated[1] = allocate_block();
       if (allocated[1] == 0) {
         if (allocated[0] != 0) {
           free_block(*allocated[0]);
@@ -822,7 +822,7 @@ add_block(ospfs_inode_t *oi)
     indirectBlock[direct_index(n)] = allocate_block();  // create direct block
     if (indirectBlock[direct_index(n)] == 0) {
       if (allocated[0] != 0) {
-        free_block(allocated[0]);
+        free_block(*allocated[0]);
         oi->oi_indirect2 = 0;
       }
       if (allocated[1] != 0) {
