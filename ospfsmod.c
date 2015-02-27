@@ -1532,11 +1532,10 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
   ospfs_symlink_inode_t *newInode;
   uint32_t entry_ino = 0;
-  ospfs_direntry_t *newDirentry;
-  
-  ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
+  int k;
+  ospfs_symlink_inode_t* sym_itr;
+  ospfs_direntry_t* newDirentry;
   /* EXERCISE: Your code here. */
-  
 
   // deal with invalid parameters
   if (dentry == NULL || dir == NULL || symname == NULL)
@@ -1562,23 +1561,24 @@ ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
       break;
     entry_ino++;
   }
-  
   // if couldn't find an empty inode
   if (entry_ino >= ospfs_super->os_ninodes)
     return -ENOSPC;
   
-  
-  // fill out info for new direntry
-  newDirentry->od_ino = entry_ino;
-  strncpy(newDirentry->od_name, dentry->d_name.name, dentry->d_name.len);
-  newDirentry->od_name[strlen(newDirentry->od_name)] = '\0';
-  
-  // fill out info for new inode entry
-  newInode->oi_size  = strlen(symname);
-  newInode->oi_ftype = OSPFS_FTYPE_SYMLINK;
-  newInode->oi_nlink = 1;
-  strncpy(newInode->oi_symlink, symname, strlen(symname));
-  newInode->oi_symlink[newInode->oi_size] = '\0';
+  for(k = 0; k < ospfs_super->os_ninodes; k++)
+  {
+    sym_itr = ospfs_inode(k);
+    if(sym_itr->oi_nlink == 0)
+    {
+      newDirentry->od_ino = k;
+      sym_itr->oi_nlink = 1;
+      sym_itr->oi_ftype = OSPFS_FTYPE_SYMLINK;
+      sym_itr->oi_size = 0;
+      strcpy(sym_itr->oi_symlink, symname);
+      entry_ino = k;
+      break;
+    }
+  }
   
   
   
