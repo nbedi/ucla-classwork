@@ -1613,8 +1613,7 @@ ospfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
   ospfs_symlink_inode_t *oi =
     (ospfs_symlink_inode_t *) ospfs_inode(dentry->d_inode->i_ino);
-  // Exercise: Your code here.
-  
+
   nd_set_link(nd, oi->oi_symlink);
   return (void *) 0;
 }

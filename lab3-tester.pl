@@ -92,10 +92,9 @@ close FOO;
     ],
 
     # symbolic link testing
-    [ 'echo foo > test/foo.txt; ' .
-      'ln -s foo.txt test/sym.txt && diff test/sym.txt test/foo.txt && rm test/sym.txt test/foo.txt',
-      ''
-    ],
+    [ 'ln -s test/hello.txt symlink ; echo "not content" >> test/hello.txt ; diff test/hello.txt symlink && echo content ; rm symlink',
+      'content'
+    ]
 
 );
 
