@@ -1,0 +1,73 @@
+# Fill in your name, student ID, and email address in this file.
+# If you are working in a team, fill out the information for both team 
+# members.
+
+# SUBMIT THE LAB ONLY ONCE (from only one partner). This file will be
+# automatically parsed in order to give both team members credit for the
+# lab.
+
+# You need to fill in the EXERCISE sections describing your solutions
+# for Tasks 1, 2, and 3, as well as write the corresponding code.
+# If you did one or more extra credit problems, indicate which one in the
+# appropriate section below (remove the # sign first). If you have any other
+# information you'd like us to know, please add it at the end of the file.
+
+# Partner 1
+Name: McKenna Galvin
+Student ID: 604290168
+Email: mckennagalvin@ucla.edu
+
+# Partner 2 (if you're working in a team)
+Name: Neil Bedi
+Student ID: 404018872
+Email: nbedi1@ucla.edu
+
+# EXERCISE 1: What method you used to make your peer download and upload
+#    files in parallel?  (~1-3 sentences)
+We used forking to implement parallelism. We forked the process so the 
+downloads would process first - in parallel - and then the uploads - also
+in parallel.
+
+# EXERCISE 2A: What conditions did you find and fix that would have
+#    triggered a buffer overrun bug?  (~1-3 sentences each)
+We found a buffer overrun bug in the file naming process. If the file name 
+is too long (equal or longer than FILENAMESIZ), the file name buffer overflows.
+We used a length limit to fix this and made the limit equal to FILENAMESIZ - 1.
+
+# EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
+#    each)
+1. Peer should not serve files outside current directory
+We solved this issue by adding a check in task_upload to see if the file is 
+in the same directory as the current directory.
+
+2. Peer should not be able to serve unlimited data
+We solved this issue by creating a limit for the max file size that can be
+downloaded. If a user attempts to download a file that is too large, it 
+goes back to try again.
+
+3. Task buffer size too small
+We increased the task buffer size to handle more peers because it could only
+handle a small number (which caused issues with the popular tracker). We fixed
+this by increasing the size of TASKBUFSIZ to 64 Kb (1024*64).
+
+# EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
+#    are they attacks?  (~3-10 sentences each)
+We had two main attacks, one for download and one for upload.
+
+The first focused on the buffer overrun bug we found in 2A. We allocate
+a 600 byte string to the file name and send it to a peer during task_download.
+This will cause a segfault in the peer's application because the filename will
+write past its buffer and overwrite variables in t. This is an attack from a 
+downloader that takes advantage of a buffer overrun.
+
+The second took advantage of serving unlimited data, the second point in 2B. 
+The uploader can cause the peer's system to run out of space by continuously
+writing to the peer's file descriptor.
+
+# Extra credit problems
+Extra credit problem: File Integrity
+Implementation details:
+Create a function to convert a file to md5. Then take the result to use later
+and check whether the file has been compromised.
+
+# Add any other information you'd like us to know below this line.
